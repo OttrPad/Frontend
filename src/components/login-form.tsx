@@ -95,12 +95,40 @@ export function LoginForm({
               </div>
             </div>
           </form>
-          <div className="bg-muted relative hidden md:block">
-            <img
-              src="/placeholder.svg"
-              alt="Image"
-              className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-            />
+          <div className="relative hidden md:block bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-800/50 to-slate-900/50"></div>
+            <div className="relative h-full flex items-center justify-center p-8">
+              <div className="text-center space-y-6">
+                <div className="w-16 h-16 bg-white/[0.1] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center">
+                  <svg
+                    className="w-8 h-8 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                    />
+                  </svg>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-white">
+                    Built for developers
+                  </h3>
+                  <p className="text-slate-300 text-sm leading-relaxed">
+                    Real-time collaboration meets powerful code editing.
+                    Build together, ship faster.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center space-x-1 text-slate-400 text-xs">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                  <span>Live collaboration</span>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
