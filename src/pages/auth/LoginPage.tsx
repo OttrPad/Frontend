@@ -16,9 +16,9 @@ export default function LoginPage() {
       }}></div>
 
       {/* Subtle animated gradients */}
-      <div className="absolute top-0 left-1/4 w-72 h-72 bg-orange-500/[0.06] rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-amber-500/[0.05] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-      <div className="absolute top-1/2 left-0 w-64 h-64 bg-orange-600/[0.04] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+      <div className="absolute top-0 left-1/4 w-72 h-72 bg-orange-400/[0.08] rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-amber-400/[0.06] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-1/2 left-0 w-64 h-64 bg-orange-300/[0.05] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
 
       {/* Huge OttrPad background text at bottom */}
       <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
