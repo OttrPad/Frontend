@@ -2,9 +2,9 @@ import { LoginForm } from "@/components/login-form";
 
 export default function LoginPage() {
   return (
-    <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-black via-gray-900 to-orange-950">
+    <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-slate-950 via-black to-slate-900">
       {/* Modern gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-gray-900/80 to-orange-950/90"></div>
+      <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/95 via-black/90 to-slate-900/95"></div>
 
       {/* Sophisticated grid pattern */}
       <div className="absolute inset-0 opacity-[0.02]" style={{
