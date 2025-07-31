@@ -132,13 +132,13 @@ export function LoginForm({
           </div>
         </CardContent>
       </Card>
-      <div className="text-orange-200/60 text-center text-xs text-balance">
+      <div className="text-white/40 text-center text-xs text-balance">
         By signing in, you agree to our{" "}
-        <a href="#" className="text-orange-300/80 hover:text-orange-200 underline underline-offset-4 transition-colors">
+        <a href="#" className="text-white/60 hover:text-orange-400 underline underline-offset-4 transition-colors">
           Terms of Service
         </a>{" "}
         and{" "}
-        <a href="#" className="text-orange-300/80 hover:text-orange-200 underline underline-offset-4 transition-colors">
+        <a href="#" className="text-white/60 hover:text-orange-400 underline underline-offset-4 transition-colors">
           Privacy Policy
         </a>
         .
