@@ -132,9 +132,16 @@ export function LoginForm({
           </div>
         </CardContent>
       </Card>
-      <div className="text-muted-foreground *:[a]:hover:text-primary text-center text-xs text-balance *:[a]:underline *:[a]:underline-offset-4">
-        By clicking continue, you agree to our <a href="#">Terms of Service</a>{" "}
-        and <a href="#">Privacy Policy</a>.
+      <div className="text-slate-500 text-center text-xs text-balance">
+        By signing in, you agree to our{" "}
+        <a href="#" className="text-slate-400 hover:text-white underline underline-offset-4 transition-colors">
+          Terms of Service
+        </a>{" "}
+        and{" "}
+        <a href="#" className="text-slate-400 hover:text-white underline underline-offset-4 transition-colors">
+          Privacy Policy
+        </a>
+        .
       </div>
     </div>
   )
