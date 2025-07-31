@@ -95,8 +95,8 @@ export function LoginForm({
               </div>
             </div>
           </form>
-          <div className="relative hidden md:block bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-sm">
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-800/50 to-slate-900/50"></div>
+          <div className="relative hidden md:block bg-gradient-to-br from-orange-500/[0.12] to-orange-600/[0.06] backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-br from-black/70 to-gray-900/60"></div>
             <div className="relative h-full flex items-center justify-center p-8">
               <div className="text-center space-y-6">
                 <div className="w-16 h-16 bg-white/[0.1] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center">
