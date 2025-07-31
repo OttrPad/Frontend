@@ -20,10 +20,10 @@ export default function LoginPage() {
       <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-violet-500/[0.03] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
       <div className="absolute top-1/2 left-0 w-64 h-64 bg-emerald-500/[0.02] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
 
-      {/* Huge OttrPad background text */}
-      <div className="absolute inset-0 flex items-center justify-center select-none pointer-events-none overflow-hidden">
-        <div className="text-center transform scale-150">
-          <h1 className="text-[25vw] sm:text-[22vw] md:text-[20vw] lg:text-[18vw] xl:text-[16vw] 2xl:text-[14vw] font-black text-white/[0.03] leading-none tracking-tighter whitespace-nowrap">
+      {/* Huge OttrPad background text at bottom */}
+      <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
+        <div className="text-center transform scale-200">
+          <h1 className="text-[35vw] sm:text-[32vw] md:text-[30vw] lg:text-[28vw] xl:text-[26vw] 2xl:text-[24vw] font-black text-white/[0.04] leading-none tracking-tighter whitespace-nowrap">
             OttrPad
           </h1>
         </div>
