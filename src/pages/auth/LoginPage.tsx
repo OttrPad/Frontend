@@ -2,9 +2,9 @@ import { LoginForm } from "@/components/login-form";
 
 export default function LoginPage() {
   return (
-    <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800">
+    <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-black via-gray-900 to-orange-950">
       {/* Modern gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-slate-900/90 via-slate-900/70 to-slate-800/90"></div>
+      <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-gray-900/80 to-orange-950/90"></div>
 
       {/* Sophisticated grid pattern */}
       <div className="absolute inset-0 opacity-[0.02]" style={{
@@ -16,14 +16,14 @@ export default function LoginPage() {
       }}></div>
 
       {/* Subtle animated gradients */}
-      <div className="absolute top-0 left-1/4 w-72 h-72 bg-blue-500/[0.03] rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-violet-500/[0.03] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-      <div className="absolute top-1/2 left-0 w-64 h-64 bg-emerald-500/[0.02] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+      <div className="absolute top-0 left-1/4 w-72 h-72 bg-orange-500/[0.06] rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-amber-500/[0.05] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-1/2 left-0 w-64 h-64 bg-orange-600/[0.04] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
 
       {/* Huge OttrPad background text at bottom */}
       <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
         <div className="text-center transform scale-150">
-          <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-white/[0.04] leading-none tracking-tighter whitespace-nowrap">
+          <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-orange-500/[0.08] leading-none tracking-tighter whitespace-nowrap">
             OttrPad
           </h1>
         </div>
@@ -37,7 +37,7 @@ export default function LoginPage() {
 
       {/* Footer */}
       <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-center">
-        <p className="text-slate-500 text-xs">
+        <p className="text-orange-300/70 text-xs">
           © 2024 OttrPad. Built for developers, by developers.
         </p>
       </div>
