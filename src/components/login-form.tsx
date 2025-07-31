@@ -12,12 +12,12 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="overflow-hidden p-0 bg-white/[0.05] backdrop-blur-xl border border-white/[0.1] shadow-2xl">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-6 md:p-8">
+          <form className="p-8 md:p-10">
             <div className="flex flex-col gap-6">
               <div className="flex flex-col items-center text-center">
-                <h1 className="text-2xl font-bold">Welcome back</h1>
-                <p className="text-muted-foreground text-balance">
-                  Login to your OttrPad account
+                <h1 className="text-2xl font-bold text-white">Welcome back</h1>
+                <p className="text-slate-300 text-balance mt-2">
+                  Sign in to your OttrPad workspace
                 </p>
               </div>
               <div className="grid gap-3">
