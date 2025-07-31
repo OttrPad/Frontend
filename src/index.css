@@ -120,27 +120,16 @@
 }
 
 @layer utilities {
-  .bg-grid-pattern {
-    background-image:
-      linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
-    background-size: 50px 50px;
+  .glassmorphism {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  @keyframes float {
-    0%, 100% {
-      transform: translateY(0px) rotate(0deg);
-    }
-    50% {
-      transform: translateY(-20px) rotate(5deg);
-    }
-  }
-
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-
-  .animate-float-delayed {
-    animation: float 6s ease-in-out infinite 2s;
+  .text-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
