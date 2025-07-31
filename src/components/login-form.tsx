@@ -35,7 +35,7 @@ export function LoginForm({
                   <Label htmlFor="password" className="text-white font-medium">Password</Label>
                   <a
                     href="#"
-                    className="ml-auto text-sm text-slate-300 hover:text-white underline-offset-2 hover:underline transition-colors"
+                    className="ml-auto text-sm text-orange-200 hover:text-orange-100 underline-offset-2 hover:underline transition-colors"
                   >
                     Forgot password?
                   </a>
