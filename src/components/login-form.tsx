@@ -20,29 +20,35 @@ export function LoginForm({
                   Sign in to your OttrPad workspace
                 </p>
               </div>
-              <div className="grid gap-3">
-                <Label htmlFor="email">Email</Label>
+              <div className="grid gap-4">
+                <Label htmlFor="email" className="text-white font-medium">Email</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="you@company.com"
                   required
+                  className="bg-white/[0.08] border-white/[0.12] text-white placeholder:text-slate-400 focus:border-white/[0.2] focus:bg-white/[0.1]"
                 />
               </div>
-              <div className="grid gap-3">
+              <div className="grid gap-4">
                 <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-white font-medium">Password</Label>
                   <a
                     href="#"
-                    className="ml-auto text-sm underline-offset-2 hover:underline"
+                    className="ml-auto text-sm text-slate-300 hover:text-white underline-offset-2 hover:underline transition-colors"
                   >
-                    Forgot your password?
+                    Forgot password?
                   </a>
                 </div>
-                <Input id="password" type="password" required />
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  className="bg-white/[0.08] border-white/[0.12] text-white placeholder:text-slate-400 focus:border-white/[0.2] focus:bg-white/[0.1]"
+                />
               </div>
-              <Button type="submit" className="w-full">
-                Login
+              <Button type="submit" className="w-full bg-white text-slate-900 hover:bg-slate-100 font-medium py-2.5">
+                Sign in
               </Button>
               <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
                 <span className="bg-card text-muted-foreground relative z-10 px-2">
