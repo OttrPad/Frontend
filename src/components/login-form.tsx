@@ -16,7 +16,7 @@ export function LoginForm({
             <div className="flex flex-col gap-6">
               <div className="flex flex-col items-center text-center">
                 <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-                <p className="text-slate-300 text-balance mt-2">
+                <p className="text-orange-100/80 text-balance mt-2">
                   Sign in to your OttrPad workspace
                 </p>
               </div>
