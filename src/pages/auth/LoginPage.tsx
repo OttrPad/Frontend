@@ -22,8 +22,8 @@ export default function LoginPage() {
 
       {/* Huge OttrPad background text at bottom */}
       <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
-        <div className="text-center transform scale-200">
-          <h1 className="text-[35vw] sm:text-[32vw] md:text-[30vw] lg:text-[28vw] xl:text-[26vw] 2xl:text-[24vw] font-black text-white/[0.04] leading-none tracking-tighter whitespace-nowrap">
+        <div className="text-center transform scale-150">
+          <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-white/[0.04] leading-none tracking-tighter whitespace-nowrap">
             OttrPad
           </h1>
         </div>
@@ -31,16 +31,6 @@ export default function LoginPage() {
 
       {/* Main content */}
       <div className="relative z-10 w-full max-w-sm md:max-w-4xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-            OttrPad
-          </h1>
-          <p className="text-slate-400 text-sm md:text-base">
-            Collaborative Code Editor
-          </p>
-        </div>
-
         {/* Glassmorphism login form */}
         <LoginForm />
       </div>
