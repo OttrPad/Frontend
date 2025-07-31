@@ -115,7 +115,7 @@ export function LoginForm({
             <div className="relative h-full flex items-center justify-center p-8">
               <div className="slideshow-container w-full">
                 {/* Slide 1 */}
-                <div className="slide slide-1 text-center space-y-6 opacity-100">
+                <div className="slide slide-1 text-center space-y-6 opacity-100 absolute inset-0 flex flex-col items-center justify-center p-8">
                   <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl transform hover:scale-110 transition-transform duration-300">
                     <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
