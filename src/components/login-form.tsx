@@ -47,7 +47,7 @@ export function LoginForm({
                   className="bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
                 />
               </div>
-              <Button type="submit" className="w-full bg-orange-400 text-black hover:bg-orange-300 font-medium py-2.5">
+              <Button type="submit" className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200">
                 Sign in
               </Button>
               <div className="relative text-center text-sm">
