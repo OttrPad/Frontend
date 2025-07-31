@@ -95,11 +95,11 @@ export function LoginForm({
               </div>
             </div>
           </form>
-          <div className="relative hidden md:block bg-gradient-to-br from-orange-500/[0.12] to-orange-600/[0.06] backdrop-blur-sm">
-            <div className="absolute inset-0 bg-gradient-to-br from-black/70 to-gray-900/60"></div>
+          <div className="relative hidden md:block bg-gradient-to-br from-orange-400/[0.10] to-orange-500/[0.05] backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-br from-black/75 to-gray-900/65"></div>
             <div className="relative h-full flex items-center justify-center p-8">
               <div className="text-center space-y-6">
-                <div className="w-16 h-16 bg-orange-500/[0.2] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center border border-orange-500/[0.3]">
+                <div className="w-16 h-16 bg-orange-400/[0.2] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center border border-orange-400/[0.3]">
                   <svg
                     className="w-8 h-8 text-white"
                     fill="none"
@@ -110,22 +110,22 @@ export function LoginForm({
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                     />
                   </svg>
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-semibold text-white">
-                    Built for developers
+                    Ideas to reality, instantly
                   </h3>
                   <p className="text-orange-100/90 text-sm leading-relaxed">
-                    Real-time collaboration meets powerful code editing.
-                    Build together, ship faster.
+                    Perfect for hobbyists, educators, and quick prototyping.
+                    Brainstorm, code, and iterate fast.
                   </p>
                 </div>
-                <div className="flex items-center justify-center space-x-1 text-orange-200/80 text-xs">
+                <div className="flex items-center justify-center space-x-1 text-orange-300/80 text-xs">
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                  <span>Live collaboration</span>
+                  <span>Quick & creative</span>
                 </div>
               </div>
             </div>
