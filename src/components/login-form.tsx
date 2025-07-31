@@ -99,7 +99,7 @@ export function LoginForm({
             <div className="absolute inset-0 bg-gradient-to-br from-black/70 to-gray-900/60"></div>
             <div className="relative h-full flex items-center justify-center p-8">
               <div className="text-center space-y-6">
-                <div className="w-16 h-16 bg-white/[0.1] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center">
+                <div className="w-16 h-16 bg-orange-500/[0.2] backdrop-blur-sm rounded-2xl mx-auto flex items-center justify-center border border-orange-500/[0.3]">
                   <svg
                     className="w-8 h-8 text-white"
                     fill="none"
