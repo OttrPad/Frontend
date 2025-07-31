@@ -23,7 +23,7 @@ export default function LoginPage() {
       {/* Huge OttrPad background text at bottom */}
       <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
         <div className="text-center transform scale-150">
-          <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-orange-500/[0.08] leading-none tracking-tighter whitespace-nowrap">
+          <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-orange-400/[0.09] leading-none tracking-tighter whitespace-nowrap">
             OttrPad
           </h1>
         </div>
