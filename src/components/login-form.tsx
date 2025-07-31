@@ -88,8 +88,8 @@ export function LoginForm({
                 </Button>
               </div>
               <div className="text-center text-sm">
-                <span className="text-orange-200/70">Don&apos;t have an account?</span>{" "}
-                <a href="#" className="text-orange-300 hover:text-orange-200 underline underline-offset-4 transition-colors">
+                <span className="text-white/50">Don&apos;t have an account?</span>{" "}
+                <a href="#" className="text-orange-400 hover:text-orange-300 underline underline-offset-4 transition-colors font-medium">
                   Sign up
                 </a>
               </div>
