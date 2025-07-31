@@ -2,44 +2,54 @@ import { LoginForm } from "@/components/login-form";
 
 export default function LoginPage() {
   return (
-    <div className="relative bg-slate-950 flex min-h-svh flex-col items-center justify-center p-6 md:p-10 overflow-hidden">
-      {/* Background gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/50 via-slate-950 to-black/50 z-0"></div>
+    <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800">
+      {/* Modern gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-slate-900/90 via-slate-900/70 to-slate-800/90"></div>
 
-      {/* Animated background elements */}
-      <div className="absolute inset-0 z-0">
-        {/* Grid pattern */}
-        <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
+      {/* Sophisticated grid pattern */}
+      <div className="absolute inset-0 opacity-[0.02]" style={{
+        backgroundImage: `
+          linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)
+        `,
+        backgroundSize: '40px 40px'
+      }}></div>
 
-        {/* Floating code symbols */}
-        <div className="absolute top-20 left-10 text-slate-700/30 text-8xl font-mono rotate-12 animate-pulse">
-          &lt;/&gt;
-        </div>
-        <div className="absolute bottom-32 right-16 text-slate-700/30 text-6xl font-mono -rotate-12 animate-pulse delay-1000">
-          { }
-        </div>
-        <div className="absolute top-1/3 right-20 text-slate-700/30 text-7xl font-mono rotate-45 animate-pulse delay-500">
-          [ ]
-        </div>
-        <div className="absolute bottom-20 left-20 text-slate-700/30 text-5xl font-mono -rotate-45 animate-pulse delay-1500">
-          ( )
+      {/* Subtle animated gradients */}
+      <div className="absolute top-0 left-1/4 w-72 h-72 bg-blue-500/[0.03] rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-violet-500/[0.03] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-1/2 left-0 w-64 h-64 bg-emerald-500/[0.02] rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+
+      {/* Subtle OttrPad branding */}
+      <div className="absolute inset-0 flex items-center justify-center select-none pointer-events-none">
+        <div className="text-center">
+          <h1 className="text-[12vw] sm:text-[10vw] md:text-[8vw] lg:text-[6vw] xl:text-[5vw] font-light text-white/[0.02] leading-none tracking-widest">
+            OttrPad
+          </h1>
         </div>
       </div>
 
-      {/* Main OttrPad branding text */}
-      <div className="absolute inset-0 flex items-center justify-center z-0 select-none">
-        <h1 className="text-[20vw] sm:text-[15vw] md:text-[12vw] lg:text-[10vw] xl:text-[8vw] font-black text-slate-800/20 leading-none tracking-tighter">
-          OttrPad
-        </h1>
-      </div>
+      {/* Main content */}
+      <div className="relative z-10 w-full max-w-sm md:max-w-4xl">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+            OttrPad
+          </h1>
+          <p className="text-slate-400 text-sm md:text-base">
+            Collaborative Code Editor
+          </p>
+        </div>
 
-      {/* Subtle glow effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl z-0"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl z-0"></div>
-
-      {/* Login form container */}
-      <div className="w-full max-w-sm md:max-w-3xl relative z-10">
+        {/* Glassmorphism login form */}
         <LoginForm />
+      </div>
+
+      {/* Footer */}
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-center">
+        <p className="text-slate-500 text-xs">
+          © 2024 OttrPad. Built for developers, by developers.
+        </p>
       </div>
     </div>
   );
