@@ -52,9 +52,9 @@ export function LoginForm({
               </Button>
               <div className="relative text-center text-sm">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/[0.1]"></div>
+                  <div className="w-full border-t border-orange-500/[0.2]"></div>
                 </div>
-                <span className="bg-transparent text-slate-400 relative px-4">
+                <span className="bg-transparent text-orange-200/70 relative px-4">
                   Or continue with
                 </span>
               </div>
