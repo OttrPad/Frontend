@@ -118,13 +118,13 @@ export function LoginForm({
                   <h3 className="text-xl font-semibold text-white">
                     Built for developers
                   </h3>
-                  <p className="text-slate-300 text-sm leading-relaxed">
+                  <p className="text-orange-100/90 text-sm leading-relaxed">
                     Real-time collaboration meets powerful code editing.
                     Build together, ship faster.
                   </p>
                 </div>
-                <div className="flex items-center justify-center space-x-1 text-slate-400 text-xs">
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <div className="flex items-center justify-center space-x-1 text-orange-200/80 text-xs">
+                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                   <span>Live collaboration</span>
                 </div>
               </div>
