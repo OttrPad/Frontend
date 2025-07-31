@@ -27,7 +27,7 @@ export function LoginForm({
                   type="email"
                   placeholder="you@company.com"
                   required
-                  className="bg-black/50 border-orange-400/40 text-white placeholder:text-orange-300/60 focus:border-orange-300 focus:bg-black/60"
+                  className="bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
                 />
               </div>
               <div className="grid gap-4">
