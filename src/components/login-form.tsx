@@ -44,7 +44,7 @@ export function LoginForm({
                   id="password"
                   type="password"
                   required
-                  className="bg-black/30 border-orange-500/30 text-white placeholder:text-orange-200/50 focus:border-orange-400 focus:bg-black/40"
+                  className="bg-black/50 border-orange-400/40 text-white placeholder:text-orange-300/60 focus:border-orange-300 focus:bg-black/60"
                 />
               </div>
               <Button type="submit" className="w-full bg-orange-500 text-black hover:bg-orange-400 font-medium py-2.5">
