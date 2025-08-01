@@ -1,5 +1,5 @@
 import { LoginForm } from "@/components/login-form";
-import Background from "@/assets/1234.jpeg";
+import Background from "@/assets/background.jpeg";
 
 export default function LoginPage() {
   return (
