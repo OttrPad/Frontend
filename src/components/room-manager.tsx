@@ -31,108 +31,141 @@ export function RoomManager() {
         </p>
       </div>
 
-      {/* Main Action Cards */}
-      <div className="grid md:grid-cols-2 gap-8">
-        {/* Join Room Card */}
-        <Card className="bg-black/20 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-orange-400/10 transition-all duration-200 hover:border-white/[0.12]">
-          <CardContent className="p-8">
-            <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
-                  <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold text-white">Join Room</h2>
-                <p className="text-white/60">Enter a room code to join an existing collaboration</p>
+      {/* Main Action Container */}
+      <Card className="bg-black/20 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-orange-400/10 max-w-2xl mx-auto">
+        <CardContent className="p-8">
+          {/* Tab Headers */}
+          <div className="flex mb-8">
+            <button
+              onClick={() => setActiveTab("join")}
+              className={`flex-1 px-6 py-3 text-sm font-medium rounded-l-xl transition-all duration-200 ${
+                activeTab === "join"
+                  ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
+                  : "bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.08]"
+              }`}
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                <span>Join Room</span>
               </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="room-code" className="text-white font-medium">Room Code</Label>
-                  <Input
-                    id="room-code"
-                    type="text"
-                    placeholder="Enter 6-digit room code"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value)}
-                    className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
-                    maxLength={6}
-                  />
-                </div>
-                
-                <Button 
-                  className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                  disabled={roomCode.length !== 6}
-                >
-                  Join Room
-                </Button>
+            </button>
+            <button
+              onClick={() => setActiveTab("create")}
+              className={`flex-1 px-6 py-3 text-sm font-medium rounded-r-xl transition-all duration-200 ${
+                activeTab === "create"
+                  ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
+                  : "bg-white/[0.05] text-white/70 hover:text-white hover:bg-white/[0.08]"
+              }`}
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Create Room</span>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </button>
+          </div>
 
-        {/* Create Room Card */}
-        <Card className="bg-black/20 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-orange-400/10 transition-all duration-200 hover:border-white/[0.12]">
-          <CardContent className="p-8">
-            <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
-                  <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
+          {/* Tab Content */}
+          <div className="space-y-6">
+            {activeTab === "join" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
+                    <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Join Existing Room</h2>
+                  <p className="text-white/60">Enter a room code to join an existing collaboration</p>
                 </div>
-                <h2 className="text-2xl font-bold text-white">Create Room</h2>
-                <p className="text-white/60">Start a new collaboration space for your team</p>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="room-code" className="text-white font-medium">Room Code</Label>
+                    <Input
+                      id="room-code"
+                      type="text"
+                      placeholder="Enter 6-digit room code"
+                      value={roomCode}
+                      onChange={(e) => setRoomCode(e.target.value)}
+                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <Button
+                    className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
+                    disabled={roomCode.length !== 6}
+                  >
+                    Join Room
+                  </Button>
+                </div>
               </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="room-name" className="text-white font-medium">Room Name</Label>
-                  <Input
-                    id="room-name"
-                    type="text"
-                    placeholder="My Awesome Project"
-                    value={newRoomName}
-                    onChange={(e) => setNewRoomName(e.target.value)}
-                    className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
-                  />
+            )}
+
+            {activeTab === "create" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
+                    <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Create New Room</h2>
+                  <p className="text-white/60">Start a new collaboration space for your team</p>
                 </div>
-                
-                <div>
-                  <Label htmlFor="room-desc" className="text-white font-medium">Description (Optional)</Label>
-                  <Input
-                    id="room-desc"
-                    type="text"
-                    placeholder="Brief description of your project"
-                    value={newRoomDesc}
-                    onChange={(e) => setNewRoomDesc(e.target.value)}
-                    className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
-                  />
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="room-name" className="text-white font-medium">Room Name</Label>
+                    <Input
+                      id="room-name"
+                      type="text"
+                      placeholder="My Awesome Project"
+                      value={newRoomName}
+                      onChange={(e) => setNewRoomName(e.target.value)}
+                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="room-desc" className="text-white font-medium">Description (Optional)</Label>
+                    <Input
+                      id="room-desc"
+                      type="text"
+                      placeholder="Brief description of your project"
+                      value={newRoomDesc}
+                      onChange={(e) => setNewRoomDesc(e.target.value)}
+                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="private-room"
+                      checked={isPrivate}
+                      onChange={(e) => setIsPrivate(e.target.checked)}
+                      className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
+                    />
+                    <Label htmlFor="private-room" className="text-white/80 text-sm">Make room private</Label>
+                  </div>
+
+                  <Button
+                    className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
+                    disabled={!newRoomName.trim()}
+                  >
+                    Create Room
+                  </Button>
                 </div>
-                
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    id="private-room"
-                    checked={isPrivate}
-                    onChange={(e) => setIsPrivate(e.target.checked)}
-                    className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
-                  />
-                  <Label htmlFor="private-room" className="text-white/80 text-sm">Make room private</Label>
-                </div>
-                
-                <Button 
-                  className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                  disabled={!newRoomName.trim()}
-                >
-                  Create Room
-                </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Recent Rooms Section */}
       <Card className="bg-black/15 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
