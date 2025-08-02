@@ -1,9 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/auth/LoginPage";
 import { ToastContainer } from "react-toastify";
-import Home from "./pages/Home";
-// import SignupPage from "./pages/auth/LoginPage";
-// import Home from "./pages/Home";
+import RoomsPage from "./pages/rooms/RoomsPage";
 
 function App() {
   return (
@@ -11,7 +9,7 @@ function App() {
       <ToastContainer />
       <Routes>
         <Route path="/" element={<LoginPage />} />
-        <Route path="/Home" element={<Home />} />
+        <Route path="/join" element={<RoomsPage />} />
         {/* <Route path="/Signup" element={<SignupPage />} /> */}
       </Routes>
     </>
