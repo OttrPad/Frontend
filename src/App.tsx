@@ -1,16 +1,22 @@
+
 import "./App.css";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {  Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/auth/LoginPage";
-import RoomsPage from "./pages/rooms/RoomsPage";
+import { ToastContainer } from 'react-toastify';
+import Home from "./pages/Home";
+// import SignupPage from "./pages/auth/LoginPage";
+// import Home from "./pages/Home";
 
 function App() {
   return (
-    <Router>
+    <>
+      <ToastContainer />
       <Routes>
         <Route path="/" element={<LoginPage />} />
-        <Route path="/join" element={<RoomsPage />} />
+        <Route path="/Home" element={<Home />} />
+        {/* <Route path="/Signup" element={<SignupPage />} /> */}
       </Routes>
-    </Router>
+    </>
   );
 }
 
