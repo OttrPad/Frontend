@@ -1,8 +1,6 @@
-
-import "./App.css";
-import {  Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/auth/LoginPage";
-import { ToastContainer } from 'react-toastify';
+import { ToastContainer } from "react-toastify";
 import Home from "./pages/Home";
 // import SignupPage from "./pages/auth/LoginPage";
 // import Home from "./pages/Home";
