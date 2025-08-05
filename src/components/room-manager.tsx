@@ -3,6 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import axios from "axios"; // Add this import
+import { toast } from "react-toastify"; // Ensure you have this package installed for notifications
+import { useNavigate } from "react-router-dom";
+
+
 
 // Mock data for recent rooms
 const recentRooms = [
@@ -15,9 +20,99 @@ const recentRooms = [
 export function RoomManager() {
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [roomCode, setRoomCode] = useState("");
+  const [userId, setUserId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+  const navigate = useNavigate();
+
+  // const handleJoinRoom = async () => {
+
+  //   try {
+        
+  //   const response = await axios.post(
+  //     `http://localhost:4000/api/rooms/${roomCode}/join`,
+  //     {
+  //       user_id: "your_user_id_here"
+  //     }
+
+  //   );    
+  
+  //     if (response.status === 200 && response.data.message) {
+  //       toast.success(response.data.message); 
+        
+       
+  //       navigate(`/room/${roomCode}`);
+
+  //     } else {
+  //       toast.error('Failed to join room');
+  //     }
+      
+  //   } catch (error) {
+  //     const err = error as Error;
+  //     console.error('Error joining room:', err.message || err);
+  //     toast.error('Failed to join room');
+  //   }
+  // };
+
+const handleJoinRoom = async () => {
+  try {
+       
+    const response = await axios.post(
+      `http://localhost:4000/api/rooms/${roomCode}/join`,
+      {
+        user_id: userId
+      }
+    );
+
+    if (response.status === 200 && response.data.message) {
+      toast.success(response.data.message); // "User added to room"
+      // Redirect to the room page
+      navigate(`/room/${roomCode}`);
+    } else if (response.status === 400 && response.data.error) {
+      toast.error(response.data.error); // "roomId and user_id are required" or other error from backend
+    } else {
+      toast.error('Failed to join room');
+    }
+  } catch (error) {
+    const err = error as Error;
+    console.error('Error joining room:', err.message || err);
+    toast.error('Failed to join room');
+  }
+};
+
+
+const handleCreateRoom = async () => {
+  try {
+    const response = await axios.post('http://localhost:4000/api/rooms', { name: newRoomName });
+    
+    if (response.status === 400 && response.data.error) { // Check if the error happened
+      toast.error(response.data.error);  // room is already exists
+      
+    } else if (response.status === 201 && response.data.message) {
+      toast.success(response.data.message); // Show success message
+      navigate(`/room/${response.data.roomCode}`); // Redirect to the new room
+    }
+
+  } catch (error) {
+    
+    if (axios.isAxiosError(error)) {
+      if (error.response && error.response.data && error.response.data.error) {
+        // Handle axios errors
+        toast.error(error.response.data.error); 
+      } else {
+        toast.error('An unexpected error occurred');
+      }
+    } else {
+      // Handle any non axios errors
+      console.error('Error creating room:', error);
+      toast.error('Failed to create room');
+    }
+  }
+};
+
+
+
 
   return (
     <div className="space-y-8">
@@ -37,7 +132,8 @@ export function RoomManager() {
           {/* Tab Headers */}
           <div className="flex mb-8">
             <button
-              onClick={() => setActiveTab("join")}
+              onClick={() =>  setActiveTab("join") }
+              
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-l-xl transition-all duration-200 ${
                 activeTab === "join"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
@@ -52,7 +148,8 @@ export function RoomManager() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab("create")}
+              onClick={() => setActiveTab("create") }
+              
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-r-xl transition-all duration-200 ${
                 activeTab === "create"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
@@ -84,6 +181,19 @@ export function RoomManager() {
 
                 <div className="space-y-4">
                   <div>
+                    <Label htmlFor="user-id" className="text-white font-medium">User ID</Label>
+                    <Input
+                      id="user-id"
+                      type="text"
+                      placeholder="Enter user ID"
+                      value={userId}
+                      onChange={(e) => setUserId(e.target.value)}
+                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
+                      maxLength={36}
+                    />
+                  </div>
+
+                  <div>
                     <Label htmlFor="room-code" className="text-white font-medium">Room Code</Label>
                     <Input
                       id="room-code"
@@ -92,13 +202,14 @@ export function RoomManager() {
                       value={roomCode}
                       onChange={(e) => setRoomCode(e.target.value)}
                       className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
-                      maxLength={6}
+                      maxLength={1}
                     />
                   </div>
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={roomCode.length !== 6}
+                    disabled={roomCode.length !== 1}
+                    onClick={handleJoinRoom}
                   >
                     Join Room
                   </Button>
@@ -157,6 +268,7 @@ export function RoomManager() {
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
                     disabled={!newRoomName.trim()}
+                    onClick={handleCreateRoom}
                   >
                     Create Room
                   </Button>
