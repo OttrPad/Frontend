@@ -1,0 +1,756 @@
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+import { v4 as uuidv4 } from "uuid";
+import type {
+  Block,
+  FileNode,
+  Milestone,
+  User,
+  TestFile,
+  RunOutput,
+  AIMessage,
+  Lang,
+} from "../types/workspace";
+
+// Files Store
+interface FilesState {
+  files: FileNode[];
+  selectedFileId: string | null;
+  expandedFolders: Set<string>;
+  addFile: (
+    parentId: string | null,
+    name: string,
+    type: "file" | "folder"
+  ) => void;
+  deleteFile: (id: string) => void;
+  renameFile: (id: string, newName: string) => void;
+  updateFileContent: (id: string, content: string) => void;
+  selectFile: (id: string | null) => void;
+  toggleFolder: (id: string) => void;
+  moveFile: (sourceId: string, targetId: string) => void;
+  getFileById: (id: string) => FileNode | undefined;
+  getFilePath: (id: string) => string;
+}
+
+// Blocks Store
+interface BlocksState {
+  blocks: Block[];
+  selectedBlockId: string | null;
+  addBlock: (position?: number, lang?: Lang) => string;
+  updateBlock: (id: string, updates: Partial<Block>) => void;
+  deleteBlock: (id: string) => void;
+  reorderBlocks: (sourceIndex: number, destinationIndex: number) => void;
+  duplicateBlock: (id: string) => void;
+  runBlock: (id: string) => void;
+  runAllBlocks: () => void;
+  stopBlock: (id: string) => void;
+  selectBlock: (id: string | null) => void;
+  getBlockById: (id: string) => Block | undefined;
+}
+
+// Milestones Store
+interface MilestonesState {
+  milestones: Milestone[];
+  selectedMilestoneId: string | null;
+  saveMilestone: (name: string, notes?: string) => void;
+  restoreMilestone: (id: string) => void;
+  deleteMilestone: (id: string) => void;
+  selectMilestone: (id: string | null) => void;
+}
+
+// Presence Store
+interface PresenceState {
+  users: User[];
+  currentUser: User | null;
+  updateUserCursor: (userId: string, blockId: string, position: number) => void;
+  addUser: (user: User) => void;
+  removeUser: (userId: string) => void;
+  setCurrentUser: (user: User) => void;
+}
+
+// Run State Store
+interface RunState {
+  outputs: RunOutput[];
+  isRunning: boolean;
+  addOutput: (output: Omit<RunOutput, "id" | "timestamp">) => void;
+  clearOutputs: () => void;
+  updateOutput: (id: string, updates: Partial<RunOutput>) => void;
+}
+
+// Tests Store
+interface TestsState {
+  testFiles: TestFile[];
+  isRunningTests: boolean;
+  addTestFile: (file: Omit<TestFile, "id">) => void;
+  runTests: () => void;
+  runSingleTest: (id: string) => void;
+  updateTestFile: (id: string, updates: Partial<TestFile>) => void;
+}
+
+// AI Assist Store
+interface AIState {
+  messages: AIMessage[];
+  isLoading: boolean;
+  addMessage: (message: Omit<AIMessage, "id" | "timestamp">) => void;
+  clearMessages: () => void;
+  sendMessage: (content: string) => void;
+}
+
+// App Store (general settings)
+interface AppState {
+  theme: "light" | "dark";
+  currentRoom: string | null;
+  sidebarWidth: number;
+  rightPanelWidth: number;
+  rightPanelTab: "output" | "tests" | "versions" | "ai";
+  isLeftSidebarCollapsed: boolean;
+  isRightSidebarCollapsed: boolean;
+  toggleTheme: () => void;
+  setCurrentRoom: (roomId: string) => void;
+  setSidebarWidth: (width: number) => void;
+  setRightPanelWidth: (width: number) => void;
+  setRightPanelTab: (tab: "output" | "tests" | "versions" | "ai") => void;
+  toggleLeftSidebar: () => void;
+  toggleRightSidebar: () => void;
+}
+
+// Helper functions
+
+// Helper functions
+const generatePath = (
+  files: FileNode[],
+  fileId: string,
+  currentPath = ""
+): string => {
+  for (const file of files) {
+    const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+    if (file.id === fileId) {
+      return fullPath;
+    }
+    if (file.children) {
+      const childPath = generatePath(file.children, fileId, fullPath);
+      if (childPath) return childPath;
+    }
+  }
+  return "";
+};
+
+const findFileById = (files: FileNode[], id: string): FileNode | undefined => {
+  for (const file of files) {
+    if (file.id === id) return file;
+    if (file.children) {
+      const found = findFileById(file.children, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+};
+
+const removeFileById = (files: FileNode[], id: string): FileNode[] => {
+  return files.filter((file) => {
+    if (file.id === id) return false;
+    if (file.children) {
+      file.children = removeFileById(file.children, id);
+    }
+    return true;
+  });
+};
+
+// Create stores
+export const useFilesStore = create<FilesState>()(
+  devtools(
+    (set, get) => ({
+      files: [
+        {
+          id: "root-src",
+          name: "src",
+          type: "folder",
+          path: "src",
+          children: [
+            {
+              id: "main-py",
+              name: "main.py",
+              type: "file",
+              path: "src/main.py",
+              content: '# Welcome to your workspace\nprint("Hello, World!")\n',
+            },
+          ],
+        },
+        {
+          id: "root-tests",
+          name: "tests",
+          type: "folder",
+          path: "tests",
+          children: [],
+        },
+      ],
+      selectedFileId: null,
+      expandedFolders: new Set(["root-src"]),
+
+      addFile: (parentId, name, type) => {
+        const newFile: FileNode = {
+          id: uuidv4(),
+          name,
+          type,
+          path: "",
+          ...(type === "folder" ? { children: [] } : { content: "" }),
+        };
+
+        set((state) => {
+          const addToParent = (files: FileNode[]): FileNode[] => {
+            if (!parentId) {
+              newFile.path = name;
+              return [...files, newFile];
+            }
+
+            return files.map((file) => {
+              if (file.id === parentId && file.type === "folder") {
+                newFile.path = `${file.path}/${name}`;
+                return {
+                  ...file,
+                  children: [...(file.children || []), newFile],
+                };
+              }
+              if (file.children) {
+                return {
+                  ...file,
+                  children: addToParent(file.children),
+                };
+              }
+              return file;
+            });
+          };
+
+          return { files: addToParent(state.files) };
+        });
+      },
+
+      deleteFile: (id) => {
+        set((state) => ({
+          files: removeFileById(state.files, id),
+          selectedFileId:
+            state.selectedFileId === id ? null : state.selectedFileId,
+        }));
+      },
+
+      renameFile: (id, newName) => {
+        set((state) => {
+          const updateFile = (files: FileNode[]): FileNode[] => {
+            return files.map((file) => {
+              if (file.id === id) {
+                const pathParts = file.path.split("/");
+                pathParts[pathParts.length - 1] = newName;
+                return { ...file, name: newName, path: pathParts.join("/") };
+              }
+              if (file.children) {
+                return { ...file, children: updateFile(file.children) };
+              }
+              return file;
+            });
+          };
+
+          return { files: updateFile(state.files) };
+        });
+      },
+
+      updateFileContent: (id, content) => {
+        set((state) => {
+          const updateFile = (files: FileNode[]): FileNode[] => {
+            return files.map((file) => {
+              if (file.id === id) {
+                return { ...file, content };
+              }
+              if (file.children) {
+                return { ...file, children: updateFile(file.children) };
+              }
+              return file;
+            });
+          };
+
+          return { files: updateFile(state.files) };
+        });
+      },
+
+      selectFile: (id) => {
+        set({ selectedFileId: id });
+      },
+
+      toggleFolder: (id) => {
+        set((state) => {
+          const newExpanded = new Set(state.expandedFolders);
+          if (newExpanded.has(id)) {
+            newExpanded.delete(id);
+          } else {
+            newExpanded.add(id);
+          }
+          return { expandedFolders: newExpanded };
+        });
+      },
+
+      moveFile: (sourceId, targetId) => {
+        // Implementation for drag & drop file movement
+        console.log("Moving file", sourceId, "to", targetId);
+      },
+
+      getFileById: (id) => {
+        return findFileById(get().files, id);
+      },
+
+      getFilePath: (id) => {
+        return generatePath(get().files, id);
+      },
+    }),
+    { name: "files-store" }
+  )
+);
+
+export const useBlocksStore = create<BlocksState>()(
+  devtools(
+    (set, get) => ({
+      blocks: [
+        {
+          id: "welcome-block",
+          lang: "python",
+          content:
+            '# Welcome to OttrPad!\n# Start coding collaboratively\nprint("Hello, World!")',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          position: 0,
+        },
+      ],
+      selectedBlockId: null,
+
+      addBlock: (position, lang = "python") => {
+        const newBlock: Block = {
+          id: uuidv4(),
+          lang,
+          content: "",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          position: position ?? get().blocks.length,
+        };
+
+        set((state) => {
+          const blocks = [...state.blocks];
+          if (position !== undefined) {
+            blocks.splice(position, 0, newBlock);
+            // Update positions
+            blocks.forEach((block, index) => {
+              block.position = index;
+            });
+          } else {
+            blocks.push(newBlock);
+          }
+          return { blocks };
+        });
+
+        return newBlock.id;
+      },
+
+      updateBlock: (id, updates) => {
+        set((state) => ({
+          blocks: state.blocks.map((block) =>
+            block.id === id
+              ? { ...block, ...updates, updatedAt: Date.now() }
+              : block
+          ),
+        }));
+      },
+
+      deleteBlock: (id) => {
+        set((state) => {
+          const blocks = state.blocks.filter((block) => block.id !== id);
+          // Update positions
+          blocks.forEach((block, index) => {
+            block.position = index;
+          });
+          return {
+            blocks,
+            selectedBlockId:
+              state.selectedBlockId === id ? null : state.selectedBlockId,
+          };
+        });
+      },
+
+      reorderBlocks: (sourceIndex, destinationIndex) => {
+        set((state) => {
+          const blocks = [...state.blocks];
+          const [movedBlock] = blocks.splice(sourceIndex, 1);
+          blocks.splice(destinationIndex, 0, movedBlock);
+
+          // Update positions
+          blocks.forEach((block, index) => {
+            block.position = index;
+          });
+
+          return { blocks };
+        });
+      },
+
+      duplicateBlock: (id) => {
+        const block = get().getBlockById(id);
+        if (block) {
+          const newBlock: Block = {
+            ...block,
+            id: uuidv4(),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            position: block.position + 1,
+          };
+
+          set((state) => {
+            const blocks = [...state.blocks];
+            blocks.splice(block.position + 1, 0, newBlock);
+            // Update positions
+            blocks.forEach((block, index) => {
+              block.position = index;
+            });
+            return { blocks };
+          });
+        }
+      },
+
+      runBlock: (id) => {
+        // Mock implementation - will be replaced with real execution
+        get().updateBlock(id, { isRunning: true, output: "", error: "" });
+
+        setTimeout(() => {
+          const block = get().getBlockById(id);
+          if (block) {
+            const mockOutput = `Executed ${block.lang} code:\n${block.content}\n\nOutput: Success`;
+            get().updateBlock(id, {
+              isRunning: false,
+              output: mockOutput,
+            });
+          }
+        }, 1000);
+      },
+
+      runAllBlocks: () => {
+        get().blocks.forEach((block) => {
+          get().runBlock(block.id);
+        });
+      },
+
+      stopBlock: (id) => {
+        get().updateBlock(id, { isRunning: false });
+      },
+
+      selectBlock: (id) => {
+        set({ selectedBlockId: id });
+      },
+
+      getBlockById: (id) => {
+        return get().blocks.find((block) => block.id === id);
+      },
+    }),
+    { name: "blocks-store" }
+  )
+);
+
+export const useMilestonesStore = create<MilestonesState>()(
+  devtools(
+    (set, get) => ({
+      milestones: [],
+      selectedMilestoneId: null,
+
+      saveMilestone: (name, notes) => {
+        const milestone: Milestone = {
+          id: uuidv4(),
+          name,
+          notes,
+          createdAt: Date.now(),
+          snapshot: {
+            blocks: useBlocksStore.getState().blocks,
+            files: useFilesStore.getState().files,
+          },
+        };
+
+        set((state) => ({
+          milestones: [...state.milestones, milestone],
+        }));
+      },
+
+      restoreMilestone: (id) => {
+        const milestone = get().milestones.find((m) => m.id === id);
+        if (milestone) {
+          useBlocksStore.setState({ blocks: milestone.snapshot.blocks });
+          useFilesStore.setState({ files: milestone.snapshot.files });
+        }
+      },
+
+      deleteMilestone: (id) => {
+        set((state) => ({
+          milestones: state.milestones.filter((m) => m.id !== id),
+          selectedMilestoneId:
+            state.selectedMilestoneId === id ? null : state.selectedMilestoneId,
+        }));
+      },
+
+      selectMilestone: (id) => {
+        set({ selectedMilestoneId: id });
+      },
+    }),
+    { name: "milestones-store" }
+  )
+);
+
+export const usePresenceStore = create<PresenceState>()(
+  devtools(
+    (set) => ({
+      users: [],
+      currentUser: null,
+
+      updateUserCursor: (userId, blockId, position) => {
+        set((state) => ({
+          users: state.users.map((user) =>
+            user.id === userId
+              ? { ...user, cursor: { blockId, position } }
+              : user
+          ),
+        }));
+      },
+
+      addUser: (user) => {
+        set((state) => ({
+          users: [...state.users.filter((u) => u.id !== user.id), user],
+        }));
+      },
+
+      removeUser: (userId) => {
+        set((state) => ({
+          users: state.users.filter((u) => u.id !== userId),
+        }));
+      },
+
+      setCurrentUser: (user) => {
+        set({ currentUser: user });
+      },
+    }),
+    { name: "presence-store" }
+  )
+);
+
+export const useRunStore = create<RunState>()(
+  devtools(
+    (set) => ({
+      outputs: [],
+      isRunning: false,
+
+      addOutput: (output) => {
+        const newOutput: RunOutput = {
+          ...output,
+          id: uuidv4(),
+          timestamp: Date.now(),
+        };
+
+        set((state) => ({
+          outputs: [...state.outputs, newOutput],
+        }));
+      },
+
+      clearOutputs: () => {
+        set({ outputs: [] });
+      },
+
+      updateOutput: (id, updates) => {
+        set((state) => ({
+          outputs: state.outputs.map((output) =>
+            output.id === id ? { ...output, ...updates } : output
+          ),
+        }));
+      },
+    }),
+    { name: "run-store" }
+  )
+);
+
+export const useTestsStore = create<TestsState>()(
+  devtools(
+    (set, get) => ({
+      testFiles: [
+        {
+          id: "test-example",
+          name: "test_example.py",
+          content:
+            'def test_example():\n    assert 1 + 1 == 2\n    print("Test passed!")',
+          path: "tests/test_example.py",
+        },
+      ],
+      isRunningTests: false,
+
+      addTestFile: (file) => {
+        const newFile: TestFile = {
+          ...file,
+          id: uuidv4(),
+        };
+
+        set((state) => ({
+          testFiles: [...state.testFiles, newFile],
+        }));
+      },
+
+      runTests: () => {
+        set({ isRunningTests: true });
+
+        // Mock test execution
+        setTimeout(() => {
+          set((state) => ({
+            isRunningTests: false,
+            testFiles: state.testFiles.map((file) => ({
+              ...file,
+              status: Math.random() > 0.3 ? "passed" : ("failed" as const),
+              lastRun: Date.now(),
+              output: "Test execution completed",
+            })),
+          }));
+        }, 2000);
+      },
+
+      runSingleTest: (id) => {
+        const file = get().testFiles.find((f) => f.id === id);
+        if (file) {
+          set((state) => ({
+            testFiles: state.testFiles.map((f) =>
+              f.id === id ? { ...f, status: "running" as const } : f
+            ),
+          }));
+
+          setTimeout(() => {
+            set((state) => ({
+              testFiles: state.testFiles.map((f) =>
+                f.id === id
+                  ? {
+                      ...f,
+                      status:
+                        Math.random() > 0.3 ? "passed" : ("failed" as const),
+                      lastRun: Date.now(),
+                      output: "Single test execution completed",
+                    }
+                  : f
+              ),
+            }));
+          }, 1000);
+        }
+      },
+
+      updateTestFile: (id, updates) => {
+        set((state) => ({
+          testFiles: state.testFiles.map((file) =>
+            file.id === id ? { ...file, ...updates } : file
+          ),
+        }));
+      },
+    }),
+    { name: "tests-store" }
+  )
+);
+
+export const useAIStore = create<AIState>()(
+  devtools(
+    (set, get) => ({
+      messages: [],
+      isLoading: false,
+
+      addMessage: (message) => {
+        const newMessage: AIMessage = {
+          ...message,
+          id: uuidv4(),
+          timestamp: Date.now(),
+        };
+
+        set((state) => ({
+          messages: [...state.messages, newMessage],
+        }));
+      },
+
+      clearMessages: () => {
+        set({ messages: [] });
+      },
+
+      sendMessage: (content) => {
+        get().addMessage({ role: "user", content });
+
+        set({ isLoading: true });
+
+        // Mock AI response
+        setTimeout(() => {
+          const responses = [
+            "I can help you with that! Here's a code suggestion:",
+            "Let me analyze your code and provide some improvements:",
+            "Based on your request, here's what I recommend:",
+            "Great question! Here's how you can implement that:",
+          ];
+
+          const randomResponse =
+            responses[Math.floor(Math.random() * responses.length)];
+
+          get().addMessage({
+            role: "assistant",
+            content: randomResponse,
+            actions: [
+              {
+                type: "insert_block",
+                data: {
+                  lang: "python",
+                  content:
+                    '# AI suggested code\nprint("This is an AI suggestion")',
+                },
+              },
+            ],
+          });
+
+          set({ isLoading: false });
+        }, 1500);
+      },
+    }),
+    { name: "ai-store" }
+  )
+);
+
+export const useAppStore = create<AppState>()(
+  devtools(
+    (set) => ({
+      theme: "dark",
+      currentRoom: null,
+      sidebarWidth: 280,
+      rightPanelWidth: 350,
+      rightPanelTab: "output",
+      isLeftSidebarCollapsed: false,
+      isRightSidebarCollapsed: false,
+
+      toggleTheme: () => {
+        set((state) => ({ theme: state.theme === "light" ? "dark" : "light" }));
+      },
+
+      setCurrentRoom: (roomId) => {
+        set({ currentRoom: roomId });
+      },
+
+      setSidebarWidth: (width) => {
+        set({ sidebarWidth: Math.max(200, Math.min(500, width)) });
+      },
+
+      setRightPanelWidth: (width) => {
+        set({ rightPanelWidth: Math.max(300, Math.min(600, width)) });
+      },
+
+      setRightPanelTab: (tab) => {
+        set({ rightPanelTab: tab });
+      },
+
+      toggleLeftSidebar: () => {
+        set((state) => ({
+          isLeftSidebarCollapsed: !state.isLeftSidebarCollapsed,
+        }));
+      },
+
+      toggleRightSidebar: () => {
+        set((state) => ({
+          isRightSidebarCollapsed: !state.isRightSidebarCollapsed,
+        }));
+      },
+    }),
+    { name: "app-store" }
+  )
+);
