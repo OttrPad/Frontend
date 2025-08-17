@@ -1,0 +1,136 @@
+/* Monaco Editor specific styles with glassmorphism theme */
+.monaco-editor-container {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(31, 41, 55, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Ensure Monaco editor is visible with glassmorphism */
+.monaco-editor {
+  background-color: rgba(31, 41, 55, 0.6) !important;
+  backdrop-filter: blur(20px);
+}
+
+.monaco-editor .view-lines {
+  background-color: transparent !important;
+}
+
+.monaco-editor .monaco-editor-background {
+  background-color: rgba(31, 41, 55, 0.6) !important;
+  backdrop-filter: blur(20px);
+}
+
+/* Enhanced text visibility with orange accents */
+.monaco-editor .view-line {
+  color: #e5e5e5 !important;
+}
+
+.monaco-editor .mtk1 {
+  color: #e5e5e5 !important;
+}
+
+/* Orange cursor matching login theme */
+.monaco-editor .cursor {
+  background-color: #fb923d !important;
+  color: #fb923d !important;
+  box-shadow: 0 0 8px rgba(251, 146, 61, 0.3);
+}
+
+/* Line numbers with orange accents */
+.monaco-editor .line-numbers {
+  color: #94a3b8 !important;
+}
+
+.monaco-editor .current-line ~ .line-numbers {
+  color: #fb923d !important;
+  font-weight: 600;
+}
+
+/* Selection with orange theme */
+.monaco-editor .selected-text {
+  background-color: rgba(251, 146, 61, 0.2) !important;
+  border: 1px solid rgba(251, 146, 61, 0.3) !important;
+}
+
+.monaco-editor .monaco-editor .focused .selected-text {
+  background-color: rgba(251, 146, 61, 0.3) !important;
+}
+
+/* Current line highlight */
+.monaco-editor .current-line {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(251, 146, 61, 0.1) !important;
+}
+
+/* Focus outline */
+.monaco-editor:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(251, 146, 61, 0.3) !important;
+}
+
+/* Scrollbar improvements with glassmorphism */
+.monaco-editor .monaco-scrollable-element .scrollbar {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(10px);
+  border-radius: 6px;
+}
+
+.monaco-editor .monaco-scrollable-element .scrollbar .slider {
+  background: rgba(251, 146, 61, 0.4) !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(251, 146, 61, 0.2) !important;
+}
+
+.monaco-editor .monaco-scrollable-element .scrollbar .slider:hover {
+  background: rgba(251, 146, 61, 0.6) !important;
+  box-shadow: 0 2px 8px rgba(251, 146, 61, 0.2) !important;
+}
+
+/* Widget styling */
+.monaco-editor .suggest-widget {
+  background: rgba(31, 41, 55, 0.9) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.monaco-editor .monaco-hover {
+  background: rgba(31, 41, 55, 0.9) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Syntax highlighting enhancements */
+.monaco-editor .mtk5 {
+  /* strings */
+  color: #fbbf24 !important;
+}
+
+.monaco-editor .mtk6 {
+  /* numbers */
+  color: #60a5fa !important;
+}
+
+.monaco-editor .mtk4 {
+  /* keywords */
+  color: #fb923d !important;
+  font-weight: 600;
+}
+
+.monaco-editor .mtk9 {
+  /* functions */
+  color: #34d399 !important;
+}
+
+.monaco-editor .mtk8 {
+  /* comments */
+  color: #94a3b8 !important;
+  font-style: italic;
+}

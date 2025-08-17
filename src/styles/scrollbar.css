@@ -1,0 +1,131 @@
+/* Custom scrollbar styles for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.5); /* gray-800 with opacity */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.8); /* gray-500 with opacity */
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.9); /* gray-400 with opacity */
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(249, 115, 22, 0.8); /* orange-500 with opacity */
+}
+
+/* Hide scrollbar for Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 114, 128, 0.8) rgba(31, 41, 55, 0.5);
+}
+
+/* Custom scrollbar utilities */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.3);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.6);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* Resize handle styles */
+.resize-handle {
+  position: relative;
+  background: #374151; /* gray-700 */
+  transition: all 0.2s ease;
+}
+
+.resize-handle:hover {
+  background: #f97316; /* orange-500 */
+}
+
+.resize-handle:active {
+  background: #ea580c; /* orange-600 */
+}
+
+/* Selection styles */
+::selection {
+  background: rgba(249, 115, 22, 0.3); /* orange-500 with opacity */
+  color: white;
+}
+
+::-moz-selection {
+  background: rgba(249, 115, 22, 0.3);
+  color: white;
+}
+
+/* Focus styles */
+*:focus {
+  outline: 2px solid rgba(249, 115, 22, 0.5);
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Prevent text selection during resize */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* Custom Monaco editor container */
+.monaco-editor-container,
+.monaco-diff-container {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Panel shadow effects */
+.panel-shadow {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.panel-shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
