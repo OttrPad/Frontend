@@ -1,41 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiClient, type Room } from "@/lib/apiClient";
+import { toast } from "react-toastify";
 
-// Mock data for recent rooms
-const recentRooms = [
-  {
-    id: "1",
-    name: "React Project Setup",
-    members: 3,
-    lastActive: "2 minutes ago",
-    isPrivate: false,
-  },
-  {
-    id: "2",
-    name: "API Development",
-    members: 5,
-    lastActive: "1 hour ago",
-    isPrivate: true,
-  },
-  {
-    id: "3",
-    name: "UI Components",
-    members: 2,
-    lastActive: "3 hours ago",
-    isPrivate: false,
-  },
-  {
-    id: "4",
-    name: "Database Design",
-    members: 4,
-    lastActive: "1 day ago",
-    isPrivate: true,
-  },
-];
+// Remove mock data - will be replaced with API data
 
 export function RoomManager() {
   const navigate = useNavigate();
@@ -44,24 +16,73 @@ export function RoomManager() {
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleJoinRoom = () => {
+  // Fetch rooms on component mount
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const fetchRooms = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.getAllRooms();
+      setRooms(response.rooms || []);
+    } catch (error) {
+      console.error("Failed to fetch rooms:", error);
+      toast.error("Failed to load rooms. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleJoinRoom = async () => {
     if (roomCode.length === 6) {
-      // Mock room join - in real app, validate room exists
-      navigate(`/workspace/${roomCode}`);
+      try {
+        setIsLoading(true);
+        await apiClient.joinRoom(roomCode);
+        toast.success("Successfully joined the room!");
+        navigate(`/workspace/${roomCode}`);
+      } catch (error) {
+        console.error("Failed to join room:", error);
+        toast.error("Failed to join room. Please check the room code.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (newRoomName.trim()) {
-      // Mock room creation - in real app, call API to create room
-      const mockRoomId = Math.random().toString(36).substr(2, 6).toUpperCase();
-      navigate(`/workspace/${mockRoomId}`);
+      try {
+        setIsCreating(true);
+        const response = await apiClient.createRoom(newRoomName.trim());
+        toast.success(`Room "${newRoomName}" created successfully!`);
+
+        // Navigate to the new room
+        if (response.room?.id) {
+          navigate(`/workspace/${response.room.id}`);
+        }
+      } catch (error) {
+        console.error("Failed to create room:", error);
+        toast.error("Failed to create room. Please try again.");
+      } finally {
+        setIsCreating(false);
+      }
     }
   };
 
-  const handleJoinExistingRoom = (roomId: string) => {
-    navigate(`/workspace/${roomId}`);
+  const handleJoinExistingRoom = async (roomId: string) => {
+    try {
+      await apiClient.joinRoom(roomId);
+      toast.success("Successfully joined the room!");
+      navigate(`/workspace/${roomId}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      toast.error("Failed to join room. Please try again.");
+    }
   };
 
   return (
@@ -183,10 +204,10 @@ export function RoomManager() {
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={roomCode.length !== 6}
+                    disabled={roomCode.length !== 6 || isLoading}
                     onClick={handleJoinRoom}
                   >
-                    Join Room
+                    {isLoading ? "Joining..." : "Join Room"}
                   </Button>
                 </div>
               </div>
@@ -271,10 +292,10 @@ export function RoomManager() {
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={!newRoomName.trim()}
+                    disabled={!newRoomName.trim() || isCreating}
                     onClick={handleCreateRoom}
                   >
-                    Create Room
+                    {isCreating ? "Creating..." : "Create Room"}
                   </Button>
                 </div>
               </div>
@@ -288,76 +309,81 @@ export function RoomManager() {
         <CardContent className="p-8">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-white">Recent Rooms</h3>
+              <h3 className="text-xl font-semibold text-white">
+                Available Rooms
+              </h3>
               <Button
                 variant="outline"
                 size="sm"
                 className="bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white hover:bg-white/[0.08] hover:border-white/[0.15] transition-all duration-200"
+                onClick={fetchRooms}
+                disabled={isLoading}
               >
-                View All
+                {isLoading ? "Loading..." : "Refresh"}
               </Button>
             </div>
 
             <div className="grid gap-4">
-              {recentRooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="flex items-center justify-between p-4 bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-orange-400/20 to-orange-500/20 rounded-xl flex items-center justify-center border border-orange-400/20">
-                      <svg
-                        className="w-6 h-6 text-orange-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                        />
-                      </svg>
+              {rooms.length === 0 ? (
+                <div className="text-center py-8 text-white/60">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-400"></div>
+                      <span>Loading rooms...</span>
                     </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h4 className="font-medium text-white group-hover:text-orange-400 transition-colors">
-                          {room.name}
-                        </h4>
-                        {room.isPrivate && (
-                          <svg
-                            className="w-4 h-4 text-orange-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm text-white/50">
-                        <span>{room.members} members</span>
-                        <span>•</span>
-                        <span>Active {room.lastActive}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium shadow-lg hover:shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
-                    onClick={() => handleJoinExistingRoom(room.id)}
-                  >
-                    Join
-                  </Button>
+                  ) : (
+                    <p>No rooms available. Create one to get started!</p>
+                  )}
                 </div>
-              ))}
+              ) : (
+                rooms.map((room) => (
+                  <div
+                    key={room.id}
+                    className="flex items-center justify-between p-4 bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-200 cursor-pointer group"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-orange-400/20 to-orange-500/20 rounded-xl flex items-center justify-center border border-orange-400/20">
+                        <svg
+                          className="w-6 h-6 text-orange-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-medium text-white group-hover:text-orange-400 transition-colors">
+                            {room.name}
+                          </h4>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-white/50">
+                          <span>Room ID: {room.id}</span>
+                          <span>•</span>
+                          <span>
+                            Created{" "}
+                            {new Date(room.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium shadow-lg hover:shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
+                      onClick={() => handleJoinExistingRoom(room.id)}
+                    >
+                      Join
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </CardContent>

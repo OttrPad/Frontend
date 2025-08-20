@@ -2,14 +2,17 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { useAppStore } from "../../store/workspace";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
+import { useAuth } from "../../hooks/useAuth";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
 import { FilesSidebar } from "../../components/workspace/FilesSidebar";
 import { NotebookArea } from "../../components/workspace/NotebookArea";
 import { RightPanel } from "../../components/workspace/RightPanel";
 import { KeyboardShortcutsModal } from "../../components/modals/KeyboardShortcutsModal";
+import { ProfileHeader } from "../../components/profile-header";
 
 export default function WorkspacePage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const { user, loading } = useAuth();
   const {
     setCurrentRoom,
     sidebarWidth,
@@ -82,10 +85,20 @@ export default function WorkspacePage() {
     }
   }, [roomId, setCurrentRoom]);
 
-  // Mock authentication check - replace with real auth logic
-  const isAuthenticated = true;
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-black to-slate-900">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-orange-500 rounded-xl animate-pulse mb-4 mx-auto"></div>
+          <p className="text-white/70">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
-  if (!isAuthenticated) {
+  // Redirect to login if not authenticated
+  if (!user) {
     return <Navigate to="/" replace />;
   }
 
@@ -95,7 +108,10 @@ export default function WorkspacePage() {
 
   return (
     <>
-      <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-black to-slate-900 text-white overflow-hidden">
+      {/* Fixed Profile Header */}
+      <ProfileHeader fixed className="z-50" />
+
+      <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-black to-slate-900 text-white overflow-hidden pt-20">
         {/* Background effects matching login page */}
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/95 via-black/90 to-slate-900/95 pointer-events-none"></div>
 
