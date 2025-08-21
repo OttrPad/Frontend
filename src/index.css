@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles/scrollbar.css";
+@import "./styles/monaco.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -156,11 +158,13 @@
   }
 
   @keyframes slideshow {
-    0%, 25% {
+    0%,
+    25% {
       opacity: 1;
       transform: translateX(0) scale(1);
     }
-    33.33%, 91.66% {
+    33.33%,
+    91.66% {
       opacity: 0;
       transform: translateX(-20px) scale(0.95);
     }
@@ -202,12 +206,14 @@
   }
 
   @keyframes indicator-pulse {
-    0%, 25% {
+    0%,
+    25% {
       opacity: 1;
       background-color: rgb(251 146 60);
       transform: scale(1.2);
     }
-    33.33%, 91.66% {
+    33.33%,
+    91.66% {
       opacity: 0.5;
       background-color: rgba(255, 255, 255, 0.3);
       transform: scale(1);

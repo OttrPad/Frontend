@@ -1,118 +1,90 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import axios from "axios"; // Add this import
-import { toast } from "react-toastify"; // Ensure you have this package installed for notifications
-import { useNavigate } from "react-router-dom";
+import { apiClient, type Room } from "@/lib/apiClient";
+import { toast } from "react-toastify";
 
-
-
-// Mock data for recent rooms
-const recentRooms = [
-  { id: "1", name: "React Project Setup", members: 3, lastActive: "2 minutes ago", isPrivate: false },
-  { id: "2", name: "API Development", members: 5, lastActive: "1 hour ago", isPrivate: true },
-  { id: "3", name: "UI Components", members: 2, lastActive: "3 hours ago", isPrivate: false },
-  { id: "4", name: "Database Design", members: 4, lastActive: "1 day ago", isPrivate: true },
-];
+// Remove mock data - will be replaced with API data
 
 export function RoomManager() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [roomCode, setRoomCode] = useState("");
   const [userId, setUserId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
-  const navigate = useNavigate();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // const handleJoinRoom = async () => {
+  // Fetch rooms on component mount
+  useEffect(() => {
+    fetchRooms();
+  }, []);
 
-  //   try {
-        
-  //   const response = await axios.post(
-  //     `http://localhost:4000/api/rooms/${roomCode}/join`,
-  //     {
-  //       user_id: "your_user_id_here"
-  //     }
+  const fetchRooms = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.getAllRooms();
+      setRooms(response.rooms || []);
+    } catch (error) {
+      console.error("Failed to fetch rooms:", error);
+      toast.error("Failed to load rooms. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  //   );    
-  
-  //     if (response.status === 200 && response.data.message) {
-  //       toast.success(response.data.message); 
-        
-       
-  //       navigate(`/room/${roomCode}`);
-
-  //     } else {
-  //       toast.error('Failed to join room');
-  //     }
-      
-  //   } catch (error) {
-  //     const err = error as Error;
-  //     console.error('Error joining room:', err.message || err);
-  //     toast.error('Failed to join room');
-  //   }
-  // };
-
-const handleJoinRoom = async () => {
-  try {
-       
-    const response = await axios.post(
-      `http://localhost:4000/api/rooms/${roomCode}/join`,
-      {
-        user_id: userId
+  const handleJoinRoom = async () => {
+    if (roomCode.length === 6) {
+      try {
+        setIsLoading(true);
+        await apiClient.joinRoom(roomCode);
+        toast.success("Successfully joined the room!");
+        navigate(`/workspace/${roomCode}`);
+      } catch (error) {
+        console.error("Failed to join room:", error);
+        toast.error("Failed to join room. Please check the room code.");
+      } finally {
+        setIsLoading(false);
       }
-    );
-
-    if (response.status === 200 && response.data.message) {
-      toast.success(response.data.message); // "User added to room"
-      // Redirect to the room page
-      navigate(`/room/${roomCode}`);
-    } else if (response.status === 400 && response.data.error) {
-      toast.error(response.data.error); // "roomId and user_id are required" or other error from backend
-    } else {
-      toast.error('Failed to join room');
     }
-  } catch (error) {
-    const err = error as Error;
-    console.error('Error joining room:', err.message || err);
-    toast.error('Failed to join room');
-  }
-};
+  };
 
+  const handleCreateRoom = async () => {
+    if (newRoomName.trim()) {
+      try {
+        setIsCreating(true);
+        const response = await apiClient.createRoom(newRoomName.trim());
+        toast.success(`Room "${newRoomName}" created successfully!`);
 
-const handleCreateRoom = async () => {
-  try {
-    const response = await axios.post('http://localhost:4000/api/rooms', { name: newRoomName });
-    
-    if (response.status === 400 && response.data.error) { // Check if the error happened
-      toast.error(response.data.error);  // room is already exists
-      
-    } else if (response.status === 201 && response.data.message) {
-      toast.success(response.data.message); // Show success message
-      navigate(`/room/${response.data.roomCode}`); // Redirect to the new room
-    }
-
-  } catch (error) {
-    
-    if (axios.isAxiosError(error)) {
-      if (error.response && error.response.data && error.response.data.error) {
-        // Handle axios errors
-        toast.error(error.response.data.error); 
-      } else {
-        toast.error('An unexpected error occurred');
+        // Navigate to the new room
+        if (response.room?.id) {
+          navigate(`/workspace/${response.room.id}`);
+        }
+      } catch (error) {
+        console.error("Failed to create room:", error);
+        toast.error("Failed to create room. Please try again.");
+      } finally {
+        setIsCreating(false);
       }
-    } else {
-      // Handle any non axios errors
-      console.error('Error creating room:', error);
-      toast.error('Failed to create room');
     }
-  }
-};
+  };
 
-
-
+  const handleJoinExistingRoom = async (roomId: string) => {
+    try {
+      await apiClient.joinRoom(roomId);
+      toast.success("Successfully joined the room!");
+      navigate(`/workspace/${roomId}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      toast.error("Failed to join room. Please try again.");
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -122,7 +94,8 @@ const handleCreateRoom = async () => {
           Welcome to Your Workspace
         </h1>
         <p className="text-white/70 text-lg max-w-2xl mx-auto">
-          Create a new room to start collaborating or join an existing room to continue working with your team.
+          Create a new room to start collaborating or join an existing room to
+          continue working with your team.
         </p>
       </div>
 
@@ -141,8 +114,18 @@ const handleCreateRoom = async () => {
               }`}
             >
               <div className="flex items-center justify-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                  />
                 </svg>
                 <span>Join Room</span>
               </div>
@@ -157,8 +140,18 @@ const handleCreateRoom = async () => {
               }`}
             >
               <div className="flex items-center justify-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
                 </svg>
                 <span>Create Room</span>
               </div>
@@ -171,30 +164,36 @@ const handleCreateRoom = async () => {
               <div className="space-y-6 animate-fade-in">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
-                    <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    <svg
+                      className="w-8 h-8 text-orange-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                      />
                     </svg>
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Join Existing Room</h2>
-                  <p className="text-white/60">Enter a room code to join an existing collaboration</p>
+                  <h2 className="text-2xl font-bold text-white">
+                    Join Existing Room
+                  </h2>
+                  <p className="text-white/60">
+                    Enter a room code to join an existing collaboration
+                  </p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="user-id" className="text-white font-medium">User ID</Label>
-                    <Input
-                      id="user-id"
-                      type="text"
-                      placeholder="Enter user ID"
-                      value={userId}
-                      onChange={(e) => setUserId(e.target.value)}
-                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
-                      maxLength={36}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="room-code" className="text-white font-medium">Room Code</Label>
+                    <Label
+                      htmlFor="room-code"
+                      className="text-white font-medium"
+                    >
+                      Room Code
+                    </Label>
                     <Input
                       id="room-code"
                       type="text"
@@ -208,10 +207,10 @@ const handleCreateRoom = async () => {
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={roomCode.length !== 1}
+                    disabled={roomCode.length !== 6 || isLoading}
                     onClick={handleJoinRoom}
                   >
-                    Join Room
+                    {isLoading ? "Joining..." : "Join Room"}
                   </Button>
                 </div>
               </div>
@@ -221,17 +220,36 @@ const handleCreateRoom = async () => {
               <div className="space-y-6 animate-fade-in">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 bg-white/[0.08] backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center border border-white/[0.12] shadow-xl">
-                    <svg className="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    <svg
+                      className="w-8 h-8 text-orange-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      />
                     </svg>
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Create New Room</h2>
-                  <p className="text-white/60">Start a new collaboration space for your team</p>
+                  <h2 className="text-2xl font-bold text-white">
+                    Create New Room
+                  </h2>
+                  <p className="text-white/60">
+                    Start a new collaboration space for your team
+                  </p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="room-name" className="text-white font-medium">Room Name</Label>
+                    <Label
+                      htmlFor="room-name"
+                      className="text-white font-medium"
+                    >
+                      Room Name
+                    </Label>
                     <Input
                       id="room-name"
                       type="text"
@@ -243,7 +261,12 @@ const handleCreateRoom = async () => {
                   </div>
 
                   <div>
-                    <Label htmlFor="room-desc" className="text-white font-medium">Description (Optional)</Label>
+                    <Label
+                      htmlFor="room-desc"
+                      className="text-white font-medium"
+                    >
+                      Description (Optional)
+                    </Label>
                     <Input
                       id="room-desc"
                       type="text"
@@ -262,15 +285,20 @@ const handleCreateRoom = async () => {
                       onChange={(e) => setIsPrivate(e.target.checked)}
                       className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
                     />
-                    <Label htmlFor="private-room" className="text-white/80 text-sm">Make room private</Label>
+                    <Label
+                      htmlFor="private-room"
+                      className="text-white/80 text-sm"
+                    >
+                      Make room private
+                    </Label>
                   </div>
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={!newRoomName.trim()}
+                    disabled={!newRoomName.trim() || isCreating}
                     onClick={handleCreateRoom}
                   >
-                    Create Room
+                    {isCreating ? "Creating..." : "Create Room"}
                   </Button>
                 </div>
               </div>
@@ -284,53 +312,81 @@ const handleCreateRoom = async () => {
         <CardContent className="p-8">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-white">Recent Rooms</h3>
+              <h3 className="text-xl font-semibold text-white">
+                Available Rooms
+              </h3>
               <Button
                 variant="outline"
                 size="sm"
                 className="bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white hover:bg-white/[0.08] hover:border-white/[0.15] transition-all duration-200"
+                onClick={fetchRooms}
+                disabled={isLoading}
               >
-                View All
+                {isLoading ? "Loading..." : "Refresh"}
               </Button>
             </div>
-            
+
             <div className="grid gap-4">
-              {recentRooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="flex items-center justify-between p-4 bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-orange-400/20 to-orange-500/20 rounded-xl flex items-center justify-center border border-orange-400/20">
-                      <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
+              {rooms.length === 0 ? (
+                <div className="text-center py-8 text-white/60">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-400"></div>
+                      <span>Loading rooms...</span>
                     </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h4 className="font-medium text-white group-hover:text-orange-400 transition-colors">{room.name}</h4>
-                        {room.isPrivate && (
-                          <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm text-white/50">
-                        <span>{room.members} members</span>
-                        <span>•</span>
-                        <span>Active {room.lastActive}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium shadow-lg hover:shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
-                  >
-                    Join
-                  </Button>
+                  ) : (
+                    <p>No rooms available. Create one to get started!</p>
+                  )}
                 </div>
-              ))}
+              ) : (
+                rooms.map((room) => (
+                  <div
+                    key={room.id}
+                    className="flex items-center justify-between p-4 bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-200 cursor-pointer group"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-orange-400/20 to-orange-500/20 rounded-xl flex items-center justify-center border border-orange-400/20">
+                        <svg
+                          className="w-6 h-6 text-orange-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-medium text-white group-hover:text-orange-400 transition-colors">
+                            {room.name}
+                          </h4>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-white/50">
+                          <span>Room ID: {room.id}</span>
+                          <span>•</span>
+                          <span>
+                            Created{" "}
+                            {new Date(room.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium shadow-lg hover:shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
+                      onClick={() => handleJoinExistingRoom(room.id)}
+                    >
+                      Join
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </CardContent>
