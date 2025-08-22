@@ -15,7 +15,7 @@ export function RoomManager() {
   const [roomCode, setRoomCode] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
-  const [isPrivate, setIsPrivate] = useState(false);
+  // const [isPrivate, setIsPrivate] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -55,10 +55,13 @@ export function RoomManager() {
   };
 
   const handleCreateRoom = async () => {
-    if (newRoomName.trim()) {
+    if (newRoomName.trim() && newRoomDesc.trim()) {
       try {
         setIsCreating(true);
-        const response = await apiClient.createRoom(newRoomName.trim());
+        const response = await apiClient.createRoom(
+          newRoomName.trim(),
+          newRoomDesc.trim()
+        );
         toast.success(`Room "${newRoomName}" created successfully!`);
 
         // Navigate to the new room
@@ -254,7 +257,13 @@ export function RoomManager() {
                       value={newRoomName}
                       onChange={(e) => setNewRoomName(e.target.value)}
                       className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                      required
                     />
+                    {/* {!newRoomName.trim() && (
+                      <p className="mt-1 text-xs text-red-400">
+                        Room name is required
+                      </p>
+                    )} */}
                   </div>
 
                   <div>
@@ -262,7 +271,7 @@ export function RoomManager() {
                       htmlFor="room-desc"
                       className="text-white font-medium"
                     >
-                      Description (Optional)
+                      Description
                     </Label>
                     <Input
                       id="room-desc"
@@ -271,10 +280,16 @@ export function RoomManager() {
                       value={newRoomDesc}
                       onChange={(e) => setNewRoomDesc(e.target.value)}
                       className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                      required
                     />
+                    {/* {!newRoomDesc.trim() && (
+                      <p className="mt-1 text-xs text-red-400">
+                        Description is required
+                      </p>
+                    )} */}
                   </div>
 
-                  <div className="flex items-center space-x-3">
+                  {/* <div className="flex items-center space-x-3">
                     <input
                       type="checkbox"
                       id="private-room"
@@ -282,17 +297,16 @@ export function RoomManager() {
                       onChange={(e) => setIsPrivate(e.target.checked)}
                       className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
                     />
-                    <Label
-                      htmlFor="private-room"
-                      className="text-white/80 text-sm"
-                    >
-                      Make room private
+                    <Label htmlFor="private-room" className="text-white">
+                      Make this room private
                     </Label>
-                  </div>
+                  </div> */}
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={!newRoomName.trim() || isCreating}
+                    disabled={
+                      !newRoomName.trim() || !newRoomDesc.trim() || isCreating
+                    }
                     onClick={handleCreateRoom}
                   >
                     {isCreating ? "Creating..." : "Create Room"}

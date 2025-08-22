@@ -40,10 +40,13 @@ export async function testAuthenticatedEndpoints() {
 }
 
 // Helper function to test room creation
-export async function testRoomCreation(roomName: string) {
+export async function testRoomCreation(
+  roomName: string,
+  roomDescription: string
+) {
   try {
     console.log(`Testing room creation with name: ${roomName}`);
-    const result = await apiClient.createRoom(roomName);
+    const result = await apiClient.createRoom(roomName, roomDescription);
     console.log("✅ Room creation passed:", result);
     return result.room?.id;
   } catch (error) {
