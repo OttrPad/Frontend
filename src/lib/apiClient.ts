@@ -95,10 +95,13 @@ class ApiClient {
   }
 
   // Room API methods
-  async createRoom(name: string): Promise<ApiResponse<Room>> {
+  async createRoom(
+    name: string,
+    description: string
+  ): Promise<ApiResponse<Room>> {
     return this.request<ApiResponse<Room>>("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, description }),
     });
   }
 

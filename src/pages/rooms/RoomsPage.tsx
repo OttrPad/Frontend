@@ -51,7 +51,6 @@ export default function RoomsPage() {
         style={{ animationDelay: "4s" }}
       ></div>
 
-      {/* Huge OttrPad background text */}
       <div className="absolute inset-0 flex items-end justify-center select-none pointer-events-none overflow-hidden pb-8">
         <div className="text-center transform scale-150">
           <h1 className="text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] xl:text-[18vw] 2xl:text-[16vw] font-black text-orange-400/[0.09] leading-none tracking-tighter whitespace-nowrap">
@@ -61,7 +60,7 @@ export default function RoomsPage() {
       </div>
 
       {/* Profile Header */}
-      <ProfileHeader fixed={false} />
+      <ProfileHeader fixed={true} />
 
       {/* Main Content */}
       <div className="relative z-10 flex-1 flex items-center justify-center p-6 md:p-10">
@@ -73,7 +72,7 @@ export default function RoomsPage() {
       {/* Footer */}
       <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-center">
         <p className="text-orange-300/70 text-xs">
-          © 2024 OttrPad. Collaborate. Create. Code.
+          © 2025 OttrPad. Collaborate. Create. Code.
         </p>
       </div>
     </div>
