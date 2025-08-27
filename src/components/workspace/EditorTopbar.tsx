@@ -54,7 +54,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
 
   return (
     <>
-      <div className="h-14 bg-gray-800/40 backdrop-blur-xl border-b border-white/[0.08] shadow-[0_4px_16px_0_rgba(0,0,0,0.2)] flex items-center justify-between px-4">
+      <div className="h-14 bg-card/80 backdrop-blur-xl border-b border-border shadow-lg flex items-center justify-between px-4">
         {/* Left Section */}
         <div className="flex items-center space-x-4">
           {/* Sidebar Toggle */}
@@ -62,7 +62,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             variant="ghost"
             size="sm"
             onClick={toggleLeftSidebar}
-            className="text-white/40 hover:text-orange-400 hover:bg-white/[0.05] transition-colors"
+            className="text-foreground/60 hover:text-primary hover:bg-accent transition-colors"
             title="Toggle Files Sidebar"
           >
             <Menu className="w-4 h-4" />
@@ -73,10 +73,12 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
               <span className="text-black font-bold text-sm">O</span>
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-white">
+              <h1 className="text-sm font-semibold text-foreground">
                 Room {roomId}
               </h1>
-              <p className="text-xs text-white/60">Collaborative Workspace</p>
+              <p className="text-xs text-muted-foreground">
+                Collaborative Workspace
+              </p>
             </div>
           </div>
         </div>
@@ -87,7 +89,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="outline"
             onClick={handleAddBlock}
-            className="bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white hover:bg-white/[0.08] hover:border-orange-400/50 transition-all duration-200"
+            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80 hover:border-primary/50 transition-all duration-200"
           >
             <Plus className="w-4 h-4 mr-1" />
             Add Block
@@ -97,7 +99,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             onClick={handleRunAll}
             disabled={isRunning || blocks.length === 0}
-            className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-500/20 transition-all duration-200"
+            className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-primary-foreground shadow-lg shadow-green-500/20 transition-all duration-200"
           >
             {isRunning ? (
               <>
@@ -116,7 +118,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="outline"
             onClick={handleSaveMilestone}
-            className="bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
+            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80"
           >
             <Save className="w-4 h-4 mr-1" />
             Save Milestone
@@ -133,7 +135,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="outline"
             onClick={handleShare}
-            className="bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
+            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80"
           >
             <Share2 className="w-4 h-4 mr-1" />
             Share
@@ -144,7 +146,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="ghost"
             onClick={toggleRightSidebar}
-            className="text-gray-400 hover:text-white hover:bg-gray-700"
+            className="text-foreground/60 hover:text-foreground hover:bg-accent"
             title="Toggle Right Panel"
           >
             <PanelRightOpen className="w-4 h-4" />
@@ -155,7 +157,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="ghost"
             onClick={toggleTheme}
-            className="text-gray-400 hover:text-white hover:bg-gray-700"
+            className="text-foreground/60 hover:text-foreground hover:bg-accent"
           >
             {theme === "dark" ? (
               <Sun className="w-4 h-4" />
@@ -168,7 +170,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
           <Button
             size="sm"
             variant="ghost"
-            className="text-gray-400 hover:text-white hover:bg-gray-700"
+            className="text-foreground/60 hover:text-foreground hover:bg-accent"
           >
             <Settings className="w-4 h-4" />
           </Button>

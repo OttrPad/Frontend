@@ -2,7 +2,38 @@
 
 ## Project Overview
 
-Integration of the realtime code editor frontend with the backend API running on localhost:4000.
+Integration of the realtime code edi#### 8. Enhanced Error Handling & Room Code Support
+
+- **Task**: Implement comprehensive error handling for room operations and room code support
+- **Files**:
+  - `src/lib/apiClient.ts` (updated)
+  - `src/components/room-manager.tsx` (updated)
+  - `src/App.tsx` (updated)
+  - `src/pages/workspace/WorkspacePage.tsx` (updated)
+- **Changes**:
+  - Created `ApiRequestError` class for better error handling with error codes and status codes
+  - Updated room code format to support `xxx-xxx-xxx` pattern (e.g., `abc-123-def`)
+  - Added form validation with visual error indicators (red borders)
+  - Implemented specific error handling for duplicate room names, authentication errors, etc.
+  - Added dual route support: `/workspace/:roomId` and `/room/:roomCode`
+  - Enhanced room creation to redirect using room codes
+  - Improved room loading with better error handling and loading states
+  - Removed OttrPad header from room manager for cleaner UI
+  - Added defensive programming for API response handling
+- **Status**: ✅ Completed
+
+#### 9. Monaco Editor Theme Fix
+
+- **Task**: Fix Monaco Editor illegal token color error
+- **File**: `src/components/monaco/MonacoEditor.tsx`
+- **Changes**:
+  - Replaced invalid rgba() color values with valid hex colors for Monaco Editor themes
+  - Fixed dark theme colors: converted `rgba(31, 41, 55, 0.6)` to `#1f2937` and other rgba values to hex equivalents
+  - Fixed light theme colors: converted rgba values to proper hex format
+  - Ensured Monaco Editor color values are compatible with Monaco's theme system
+- **Status**: ✅ Completed
+
+#### 10. Room Validationor frontend with the backend API running on localhost:4000.
 
 ## Task Tracking
 
@@ -77,35 +108,55 @@ Integration of the realtime code editor frontend with the backend API running on
   - Added sign out functionality with toast notifications
 - **Status**: ✅ Completed
 
-#### 7. Room Validation
+#### 7. Enhanced Error Handling & Room Code Support
+
+- **Task**: Implement better API error handling and room code routing
+- **Files**:
+  - `src/lib/apiClient.ts` (updated)
+  - `src/components/room-manager.tsx` (updated)
+  - `src/App.tsx` (updated)
+  - `src/pages/workspace/WorkspacePage.tsx` (updated)
+- **Changes**:
+  - Created `ApiRequestError` class for better error handling
+  - Added room code format support (xxx-xxx-xxx)
+  - Updated API client to handle room codes vs room IDs
+  - Added specific error handling for duplicate room names
+  - Implemented form validation with visual error indicators
+  - Added `/room/:roomCode` route for shareable room links
+  - Updated WorkspacePage to handle both room IDs and room codes
+  - Enhanced toast notifications with specific error messages
+  - Added automatic navigation to room after creation/joining
+- **Status**: ✅ Completed
+
+#### 8. Room Validation
 
 - **Task**: Implement room existence validation for join functionality
-- **Status**: 🔄 Partially implemented (needs backend room lookup by code)
+- **Status**: ✅ Completed (integrated with error handling)
 
 ### 📋 Pending Tasks
 
-#### 8. Workspace Page Integration
+#### 9. Workspace Page Integration
 
 - **Task**: Update workspace page to validate room access via API
 - **File**: `src/pages/workspace/WorkspacePage.tsx`
 - **Status**: ⏳ Pending
 
-#### 9. Real-time Features
+#### 10. Real-time Features
 
 - **Task**: Implement WebSocket connection for real-time collaboration
 - **Status**: ⏳ Pending (requires WebSocket backend implementation)
 
-#### 10. User Authentication Flow
+#### 11. User Authentication Flow
 
 - **Task**: Ensure proper authentication flow with backend
 - **Status**: ⏳ Pending
 
-#### 11. Error Boundary
+#### 12. Error Boundary
 
 - **Task**: Add error boundary for better error handling
 - **Status**: ⏳ Pending
 
-#### 12. Health Check Integration
+#### 13. Health Check Integration
 
 - **Task**: Add health check status in the UI
 - **Status**: ⏳ Pending

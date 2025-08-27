@@ -1,11 +1,4 @@
-export type Lang =
-  | "python"
-  | "javascript"
-  | "typescript"
-  | "html"
-  | "css"
-  | "json"
-  | "markdown";
+export type Lang = "python" | "json" | "markdown";
 
 export interface Block {
   id: string;
@@ -23,8 +16,7 @@ export interface Block {
 export interface FileNode {
   id: string;
   name: string;
-  type: "file" | "folder";
-  children?: FileNode[];
+  type: "file";
   content?: string;
   isOpen?: boolean;
   parentId?: string;

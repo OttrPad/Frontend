@@ -48,9 +48,9 @@ export function RightPanel() {
   };
 
   return (
-    <div className="h-full bg-gray-800 flex flex-col overflow-hidden">
+    <div className="h-full bg-card flex flex-col overflow-hidden">
       {/* Tab Headers */}
-      <div className="flex-shrink-0 border-b border-gray-700">
+      <div className="flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex overflow-x-auto scrollbar-none">
             {tabs.map((tab) => {
@@ -65,8 +65,8 @@ export function RightPanel() {
                     flex items-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
                     ${
                       isActive
-                        ? "text-orange-400 border-orange-400 bg-gray-700/50"
-                        : "text-gray-400 border-transparent hover:text-white hover:bg-gray-700/30"
+                        ? "text-orange-400 border-orange-400 bg-accent/50"
+                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/30"
                     }
                   `}
                 >
@@ -81,7 +81,7 @@ export function RightPanel() {
             variant="ghost"
             size="sm"
             onClick={handleClose}
-            className="flex-shrink-0 m-2 h-8 w-8 p-0 text-gray-400 hover:text-white"
+            className="flex-shrink-0 m-2 h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
             title="Close Panel"
           >
             <X className="w-4 h-4" />

@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Editor, type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type { Lang } from "../../types/workspace";
+import { useAppStore } from "../../store/workspace";
 
 interface MonacoEditorProps {
   value: string;
   onChange: (value: string) => void;
   language: Lang;
-  theme?: "light" | "dark";
   height?: string | number;
   options?: editor.IStandaloneEditorConstructionOptions;
   onMount?: (editor: editor.IStandaloneCodeEditor) => void;
@@ -18,10 +18,6 @@ interface MonacoEditorProps {
 const getMonacoLanguage = (lang: Lang): string => {
   const languageMap: Record<Lang, string> = {
     python: "python",
-    javascript: "javascript",
-    typescript: "typescript",
-    html: "html",
-    css: "css",
     json: "json",
     markdown: "markdown",
   };
@@ -32,13 +28,13 @@ export function MonacoEditor({
   value,
   onChange,
   language,
-  theme = "dark",
   height = "200px",
   options = {},
   onMount,
   readOnly = false,
   className = "",
 }: MonacoEditorProps) {
+  const { theme } = useAppStore();
   const [isReady, setIsReady] = useState(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -99,23 +95,23 @@ export function MonacoEditor({
         { token: "operator", foreground: "#fb923d" },
       ],
       colors: {
-        "editor.background": "rgba(31, 41, 55, 0.6)",
+        "editor.background": "#1f2937",
         "editor.foreground": "#e5e5e5",
-        "editor.lineHighlightBackground": "rgba(255, 255, 255, 0.02)",
-        "editor.selectionBackground": "rgba(251, 146, 61, 0.2)",
-        "editor.inactiveSelectionBackground": "rgba(251, 146, 61, 0.1)",
+        "editor.lineHighlightBackground": "#374151",
+        "editor.selectionBackground": "#fb923d33",
+        "editor.inactiveSelectionBackground": "#fb923d1a",
         "editorCursor.foreground": "#fb923d",
         "editorLineNumber.foreground": "#94a3b8",
         "editorLineNumber.activeForeground": "#fb923d",
-        "editor.findMatchBackground": "rgba(251, 146, 61, 0.3)",
-        "editor.findMatchHighlightBackground": "rgba(251, 146, 61, 0.15)",
-        "editorWidget.background": "rgba(31, 41, 55, 0.9)",
-        "editorWidget.border": "rgba(255, 255, 255, 0.1)",
-        "editorHoverWidget.background": "rgba(31, 41, 55, 0.9)",
-        "editorHoverWidget.border": "rgba(255, 255, 255, 0.1)",
-        "editorSuggestWidget.background": "rgba(31, 41, 55, 0.9)",
-        "editorSuggestWidget.border": "rgba(255, 255, 255, 0.1)",
-        "editorSuggestWidget.selectedBackground": "rgba(251, 146, 61, 0.2)",
+        "editor.findMatchBackground": "#fb923d4d",
+        "editor.findMatchHighlightBackground": "#fb923d26",
+        "editorWidget.background": "#1f2937",
+        "editorWidget.border": "#374151",
+        "editorHoverWidget.background": "#1f2937",
+        "editorHoverWidget.border": "#374151",
+        "editorSuggestWidget.background": "#1f2937",
+        "editorSuggestWidget.border": "#374151",
+        "editorSuggestWidget.selectedBackground": "#fb923d33",
       },
     });
 
@@ -133,20 +129,20 @@ export function MonacoEditor({
         { token: "operator", foreground: "#ea580c" },
       ],
       colors: {
-        "editor.background": "rgba(255, 255, 255, 0.9)",
+        "editor.background": "#ffffff",
         "editor.foreground": "#1f2937",
-        "editor.lineHighlightBackground": "rgba(251, 146, 61, 0.05)",
-        "editor.selectionBackground": "rgba(251, 146, 61, 0.2)",
-        "editor.inactiveSelectionBackground": "rgba(251, 146, 61, 0.1)",
+        "editor.lineHighlightBackground": "#fb923d0d",
+        "editor.selectionBackground": "#fb923d33",
+        "editor.inactiveSelectionBackground": "#fb923d1a",
         "editorCursor.foreground": "#ea580c",
         "editorLineNumber.foreground": "#64748b",
         "editorLineNumber.activeForeground": "#ea580c",
-        "editor.findMatchBackground": "rgba(251, 146, 61, 0.3)",
-        "editor.findMatchHighlightBackground": "rgba(251, 146, 61, 0.15)",
-        "editorWidget.background": "rgba(255, 255, 255, 0.95)",
-        "editorWidget.border": "rgba(0, 0, 0, 0.1)",
-        "editorHoverWidget.background": "rgba(255, 255, 255, 0.95)",
-        "editorHoverWidget.border": "rgba(0, 0, 0, 0.1)",
+        "editor.findMatchBackground": "#fb923d4d",
+        "editor.findMatchHighlightBackground": "#fb923d26",
+        "editorWidget.background": "#ffffff",
+        "editorWidget.border": "#e5e7eb",
+        "editorHoverWidget.background": "#ffffff",
+        "editorHoverWidget.border": "#e5e7eb",
       },
     });
 
