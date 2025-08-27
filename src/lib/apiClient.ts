@@ -12,8 +12,10 @@ export interface Room {
   id: string;
   name: string;
   description?: string;
+  room_code?: string; // Added room_code field
   created_at: string;
   updated_at: string;
+  created_by?: string;
 }
 
 export interface User {
@@ -22,10 +24,10 @@ export interface User {
   role: string;
 }
 
-export interface ApiResponse<T> {
+export interface ApiResponse {
   message?: string;
-  room?: T;
-  rooms?: T[];
+  room?: Room;
+  rooms?: Room[];
   creator?: User;
   user?: User;
   deletedBy?: User;
@@ -45,7 +47,20 @@ export interface ServicesHealthResponse {
 
 export interface ApiError {
   error: string;
-  message: string;
+  message?: string;
+}
+
+// Custom error class for API errors
+export class ApiRequestError extends Error {
+  public errorCode: string;
+  public statusCode: number;
+
+  constructor(message: string, errorCode: string, statusCode: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.errorCode = errorCode;
+    this.statusCode = statusCode;
+  }
 }
 
 // Helper function to get auth token
@@ -82,12 +97,23 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}${endpoint}`, config);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
-        error: "UNKNOWN_ERROR",
-        message: `HTTP ${response.status}: ${response.statusText}`,
-      }));
-      throw new Error(
-        errorData.message || `Request failed with status ${response.status}`
+      let errorData: ApiError;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = {
+          error: "UNKNOWN_ERROR",
+          message: `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+
+      // Throw custom error with proper error codes
+      throw new ApiRequestError(
+        errorData.message ||
+          errorData.error ||
+          `Request failed with status ${response.status}`,
+        errorData.error || "UNKNOWN_ERROR",
+        response.status
       );
     }
 
@@ -95,38 +121,46 @@ class ApiClient {
   }
 
   // Room API methods
-  async createRoom(
-    name: string,
-    description: string
-  ): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>("/api/rooms", {
+  async createRoom(name: string, description: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>("/api/rooms", {
       method: "POST",
       body: JSON.stringify({ name, description }),
     });
   }
 
-  async getAllRooms(): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>("/api/rooms");
+  async getAllRooms(): Promise<ApiResponse> {
+    return this.request<ApiResponse>("/api/rooms");
   }
 
-  async getRoomDetails(id: string): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>(`/api/rooms/${id}`);
+  async getRoomDetails(id: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/rooms/${id}`);
   }
 
-  async deleteRoom(id: string): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>(`/api/rooms/${id}`, {
+  async deleteRoom(id: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/rooms/${id}`, {
       method: "DELETE",
     });
   }
 
-  async joinRoom(id: string): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>(`/api/rooms/${id}/join`, {
+  async joinRoom(roomIdOrCode: string): Promise<ApiResponse> {
+    // If it looks like a room code (format: xxx-xxx-xxx), use the room code endpoint
+    if (roomIdOrCode.includes("-") && roomIdOrCode.length === 11) {
+      return this.request<ApiResponse>(`/api/rooms/code/${roomIdOrCode}/join`, {
+        method: "POST",
+      });
+    }
+    // Otherwise, treat it as a room ID
+    return this.request<ApiResponse>(`/api/rooms/${roomIdOrCode}/join`, {
       method: "POST",
     });
   }
 
-  async leaveRoom(id: string): Promise<ApiResponse<Room>> {
-    return this.request<ApiResponse<Room>>(`/api/rooms/${id}/leave`, {
+  async getRoomByCode(roomCode: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/rooms/code/${roomCode}`);
+  }
+
+  async leaveRoom(id: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/rooms/${id}/leave`, {
       method: "DELETE",
     });
   }

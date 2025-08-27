@@ -29,7 +29,7 @@ export function TestsPane() {
       case "running":
         return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />;
+        return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -49,11 +49,11 @@ export function TestsPane() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-gray-700">
+      <div className="flex-shrink-0 p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <TestTube className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-white">Tests</h3>
+            <h3 className="font-semibold text-foreground">Tests</h3>
             {isRunningTests && (
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
             )}
@@ -98,12 +98,12 @@ export function TestsPane() {
       {/* Content */}
       <div className="flex-1 flex">
         {/* Test List */}
-        <div className="w-1/2 border-r border-gray-700 overflow-y-auto scrollbar-thin">
+        <div className="w-1/2 border-r border-border overflow-y-auto scrollbar-thin">
           {testFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
               <TestTube className="w-12 h-12 mb-4" />
               <p className="text-sm text-center">No test files found</p>
-              <p className="text-xs text-gray-600 text-center">
+              <p className="text-xs text-muted-foreground/70 text-center">
                 Create test files in the /tests directory
               </p>
             </div>
@@ -117,15 +117,15 @@ export function TestsPane() {
                     p-3 rounded-lg border cursor-pointer transition-all
                     ${
                       selectedTestId === test.id
-                        ? "bg-gray-700 border-orange-400"
-                        : "bg-gray-700/30 border-gray-600 hover:bg-gray-700/50"
+                        ? "bg-accent border-orange-400"
+                        : "bg-card/30 border-border hover:bg-card/50"
                     }
                   `}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
                       {getStatusIcon(test.status)}
-                      <span className="text-sm font-medium text-white truncate">
+                      <span className="text-sm font-medium text-foreground truncate">
                         {test.name}
                       </span>
                     </div>
@@ -169,11 +169,11 @@ export function TestsPane() {
           {selectedTest ? (
             <>
               {/* Test Header */}
-              <div className="flex-shrink-0 p-4 border-b border-gray-700">
+              <div className="flex-shrink-0 p-4 border-b border-border">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <FileText className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-medium text-white">
+                    <span className="text-sm font-medium text-foreground">
                       {selectedTest.name}
                     </span>
                     {getStatusIcon(selectedTest.status)}
@@ -184,7 +184,7 @@ export function TestsPane() {
                     size="sm"
                     onClick={() => runSingleTest(selectedTest.id)}
                     disabled={selectedTest.status === "running"}
-                    className="text-gray-400 hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
@@ -198,7 +198,6 @@ export function TestsPane() {
                     value={selectedTest.content}
                     onChange={() => {}} // Read-only for now
                     language="python"
-                    theme="dark"
                     readOnly
                     options={{
                       fontSize: 12,
@@ -209,11 +208,11 @@ export function TestsPane() {
 
                 {/* Test Output */}
                 {selectedTest.output && (
-                  <div className="flex-shrink-0 border-t border-gray-700 p-4">
-                    <h4 className="text-sm font-medium text-white mb-2">
+                  <div className="flex-shrink-0 border-t border-border p-4">
+                    <h4 className="text-sm font-medium text-foreground mb-2">
                       Output
                     </h4>
-                    <pre className="text-xs font-mono text-gray-300 bg-black/20 rounded p-3 border border-gray-600/30 max-h-32 overflow-y-auto">
+                    <pre className="text-xs font-mono text-foreground/90 bg-muted/20 rounded p-3 border border-border/30 max-h-32 overflow-y-auto">
                       {selectedTest.output}
                     </pre>
                   </div>
@@ -221,7 +220,7 @@ export function TestsPane() {
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="flex items-center justify-center h-full text-muted-foreground">
               <div className="text-center">
                 <FileText className="w-12 h-12 mx-auto mb-4" />
                 <p className="text-sm">Select a test to view details</p>

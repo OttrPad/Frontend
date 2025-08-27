@@ -65,9 +65,9 @@ export function NotebookArea() {
   return (
     <div className="h-full bg-transparent flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-white/[0.08] bg-gray-800/30 backdrop-blur-sm">
+      <div className="flex-shrink-0 p-4 border-b border-border bg-card/30 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Notebook</h2>
+          <h2 className="text-lg font-semibold text-foreground">Notebook</h2>
           <Button
             onClick={handleAddBlock}
             size="sm"
@@ -82,12 +82,12 @@ export function NotebookArea() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {blocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-white/60">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <FileText className="w-16 h-16 mb-4 text-orange-400/60" />
-            <h3 className="text-xl font-semibold mb-2 text-white">
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
               No blocks yet
             </h3>
-            <p className="text-white/40 mb-4 text-center max-w-md">
+            <p className="text-muted-foreground mb-4 text-center max-w-md">
               Create your first code block to start building your project
             </p>
             <Button

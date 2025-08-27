@@ -2,12 +2,12 @@ import { useEffect, useRef } from "react";
 import { DiffEditor, type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type { Lang } from "../../types/workspace";
+import { useAppStore } from "../../store/workspace";
 
 interface MonacoDiffProps {
   original: string;
   modified: string;
   language: Lang;
-  theme?: "light" | "dark";
   height?: string | number;
   options?: editor.IStandaloneDiffEditorConstructionOptions;
   onMount?: (diffEditor: editor.IStandaloneDiffEditor) => void;
@@ -17,10 +17,6 @@ interface MonacoDiffProps {
 const getMonacoLanguage = (lang: Lang): string => {
   const languageMap: Record<Lang, string> = {
     python: "python",
-    javascript: "javascript",
-    typescript: "typescript",
-    html: "html",
-    css: "css",
     json: "json",
     markdown: "markdown",
   };
@@ -31,12 +27,12 @@ export function MonacoDiff({
   original,
   modified,
   language,
-  theme = "dark",
   height = "400px",
   options = {},
   onMount,
   className = "",
 }: MonacoDiffProps) {
+  const { theme } = useAppStore();
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
 

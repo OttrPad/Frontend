@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -17,7 +18,7 @@ import {
 import { Button } from "../ui/button";
 import { MonacoEditor } from "../monaco/MonacoEditor";
 import { BlockOutput } from "./BlockOutput";
-import { useBlocksStore, useAppStore } from "../../store/workspace";
+import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
 
 interface BlockProps {
@@ -28,10 +29,6 @@ interface BlockProps {
 
 const LANGUAGE_OPTIONS: { value: Lang; label: string }[] = [
   { value: "python", label: "Python" },
-  { value: "javascript", label: "JavaScript" },
-  { value: "typescript", label: "TypeScript" },
-  { value: "html", label: "HTML" },
-  { value: "css", label: "CSS" },
   { value: "json", label: "JSON" },
   { value: "markdown", label: "Markdown" },
 ];
@@ -45,10 +42,14 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
     stopBlock,
     blocks,
   } = useBlocksStore();
-  const { theme } = useAppStore();
 
   const [showLanguageSelect, setShowLanguageSelect] = useState(false);
   const [contentBuffer, setContentBuffer] = useState(block.content);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   const {
     attributes,
@@ -82,6 +83,54 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
     updateBlock(block.id, { lang });
     setShowLanguageSelect(false);
   };
+
+  const calculatePosition = useCallback((buttonRef: React.RefObject<HTMLButtonElement | null>) => {
+    if (!buttonRef.current) return { top: 0, left: 0 };
+    
+    const rect = buttonRef.current.getBoundingClientRect();
+    return {
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX
+    };
+  }, []);
+
+  const handleLanguageToggle = useCallback(() => {
+    if (!showLanguageSelect) {
+      setDropdownPosition(calculatePosition(languageButtonRef));
+    }
+    setShowLanguageSelect(!showLanguageSelect);
+  }, [showLanguageSelect, calculatePosition]);
+
+  const handleMoreMenuToggle = useCallback(() => {
+    if (!showMoreMenu) {
+      setMoreMenuPosition(calculatePosition(moreButtonRef));
+    }
+    setShowMoreMenu(!showMoreMenu);
+  }, [showMoreMenu, calculatePosition]);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      
+      if (showLanguageSelect && 
+          languageButtonRef.current && 
+          !languageButtonRef.current.contains(target)) {
+        setShowLanguageSelect(false);
+      }
+      
+      if (showMoreMenu && 
+          moreButtonRef.current && 
+          !moreButtonRef.current.contains(target)) {
+        setShowMoreMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLanguageSelect, showMoreMenu]);
 
   const handleRun = () => {
     if (block.isRunning) {
@@ -132,7 +181,7 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
       ref={setNodeRef}
       style={style}
       className={`
-        bg-gray-800/30 backdrop-blur-2xl border border-white/[0.08] rounded-lg overflow-hidden
+        bg-card/30 backdrop-blur-2xl border border-border rounded-lg overflow-hidden
         shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-orange-400/10
         ${
           isDragging
@@ -143,13 +192,13 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
       `}
     >
       {/* Block Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white/[0.03] backdrop-blur-md border-b border-white/[0.08]">
+      <div className="flex items-center justify-between px-4 py-2 bg-white/[0.03] backdrop-blur-md border-b border-white/[0.08] z-50">
         {/* Left: Drag Handle & Language */}
         <div className="flex items-center space-x-2">
           <button
             {...attributes}
             {...listeners}
-            className="text-white/40 hover:text-orange-400 cursor-grab active:cursor-grabbing transition-colors"
+            className="text-muted-foreground hover:text-orange-400 cursor-grab active:cursor-grabbing transition-colors"
             title="Drag to reorder"
           >
             <GripVertical className="w-4 h-4" />
@@ -157,40 +206,48 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
 
           <div className="relative">
             <Button
+              ref={languageButtonRef}
               variant="ghost"
               size="sm"
-              onClick={() => setShowLanguageSelect(!showLanguageSelect)}
+              onClick={handleLanguageToggle}
               className="text-orange-400 hover:text-orange-300 hover:bg-white/[0.05] font-mono text-xs"
             >
               {LANGUAGE_OPTIONS.find((lang) => lang.value === block.lang)
                 ?.label || "Python"}
             </Button>
 
-            {showLanguageSelect && (
-              <div className="absolute top-full left-0 z-10 bg-gray-800/90 backdrop-blur-xl border border-white/[0.08] rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] mt-1">
-                {LANGUAGE_OPTIONS.map((lang) => (
+            {showLanguageSelect && dropdownPosition && createPortal(
+              <div 
+                className="fixed z-[99999] bg-popover/90 backdrop-blur-xl border border-border rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] mt-1 block-dropdown-menu"
+                style={{
+                  top: dropdownPosition.top,
+                  left: dropdownPosition.left,
+                }}
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
                   <button
-                    key={lang.value}
-                    onClick={() => handleLanguageChange(lang.value)}
+                    key={option.value}
+                    onClick={() => handleLanguageChange(option.value)}
                     className={`
-                      block w-full px-3 py-2 text-left text-sm hover:bg-white/[0.05] transition-colors
+                      w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors
                       ${
-                        block.lang === lang.value
-                          ? "text-orange-400 bg-white/[0.05]"
-                          : "text-white/80 hover:text-white"
+                        block.lang === option.value
+                          ? "bg-accent text-orange-400"
+                          : "text-foreground/80"
                       }
                     `}
                   >
-                    {lang.label}
+                    {option.label}
                   </button>
                 ))}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
 
           <button
             onClick={handleToggleCollapse}
-            className="text-white/40 hover:text-orange-400 transition-colors"
+            className="text-muted-foreground hover:text-orange-400 transition-colors"
             title={block.collapsed ? "Expand" : "Collapse"}
           >
             {block.collapsed ? (
@@ -230,7 +287,7 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
             size="sm"
             onClick={handleMoveUp}
             disabled={!canMoveUp}
-            className="h-7 w-7 p-0 text-white/40 hover:text-orange-400 hover:bg-white/[0.05] disabled:opacity-30 transition-colors"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-orange-400 hover:bg-accent disabled:opacity-30 transition-colors"
             title="Move Up (Alt+↑)"
           >
             <ArrowUp className="w-3 h-3" />
@@ -241,32 +298,41 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
             size="sm"
             onClick={handleMoveDown}
             disabled={!canMoveDown}
-            className="h-7 w-7 p-0 text-white/40 hover:text-orange-400 hover:bg-white/[0.05] disabled:opacity-30 transition-colors"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-orange-400 hover:bg-accent disabled:opacity-30 transition-colors"
             title="Move Down (Alt+↓)"
           >
             <ArrowDown className="w-3 h-3" />
           </Button>
 
-          <div className="relative group">
+          <div className="relative">
             <Button
+              ref={moreButtonRef}
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-white/40 hover:text-orange-400 hover:bg-white/[0.05] transition-colors"
+              onClick={handleMoreMenuToggle}
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-orange-400 hover:bg-accent transition-colors"
             >
               <MoreVertical className="w-3 h-3" />
             </Button>
 
-            <div className="absolute right-0 top-full mt-1 bg-gray-800/90 backdrop-blur-xl border border-white/[0.08] rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-[140px]">
+            {showMoreMenu && moreMenuPosition && createPortal(
+              <div 
+                className="fixed z-[99999] bg-popover/90 backdrop-blur-xl border border-border rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] min-w-[140px] block-dropdown-menu"
+                style={{
+                  top: moreMenuPosition.top,
+                  left: moreMenuPosition.left - 140, // Offset to align with button
+                }}
+              >
               <button
                 onClick={onAddBlockBelow}
-                className="w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/[0.05] hover:text-white transition-colors flex items-center space-x-2"
+                className="w-full px-3 py-2 text-left text-sm text-foreground/80 hover:bg-accent hover:text-foreground transition-colors flex items-center space-x-2"
               >
                 <Plus className="w-3 h-3" />
                 <span>Add Below</span>
               </button>
               <button
                 onClick={handleDuplicate}
-                className="w-full px-3 py-2 text-left text-sm text-white/80 hover:bg-white/[0.05] hover:text-white transition-colors flex items-center space-x-2"
+                className="w-full px-3 py-2 text-left text-sm text-foreground/80 hover:bg-accent hover:text-foreground transition-colors flex items-center space-x-2"
               >
                 <Copy className="w-3 h-3" />
                 <span>Duplicate</span>
@@ -279,7 +345,9 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
                 <Trash2 className="w-3 h-3" />
                 <span>Delete</span>
               </button>
-            </div>
+              </div>,
+              document.body
+            )}
           </div>
         </div>
       </div>
@@ -288,12 +356,11 @@ export function Block({ block, isDragging, onAddBlockBelow }: BlockProps) {
       {!block.collapsed && (
         <div className="flex flex-col">
           {/* Monaco Editor */}
-          <div className="min-h-[120px] bg-gray-900/40 backdrop-blur-sm rounded-md m-2">
+          <div className="min-h-[120px] bg-muted/40 backdrop-blur-sm rounded-md m-2 relative z-10 isolate">
             <MonacoEditor
               value={contentBuffer}
               onChange={updateContentDebounced}
               language={block.lang}
-              theme={theme}
               height={120}
               options={{
                 minimap: { enabled: false },

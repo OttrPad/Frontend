@@ -8,10 +8,12 @@ import { FilesSidebar } from "../../components/workspace/FilesSidebar";
 import { NotebookArea } from "../../components/workspace/NotebookArea";
 import { RightPanel } from "../../components/workspace/RightPanel";
 import { KeyboardShortcutsModal } from "../../components/modals/KeyboardShortcutsModal";
-import { ProfileHeader } from "../../components/profile-header";
 
 export default function WorkspacePage() {
-  const { roomId } = useParams<{ roomId: string }>();
+  const { roomId, roomCode } = useParams<{
+    roomId?: string;
+    roomCode?: string;
+  }>();
   const { user, loading } = useAuth();
   const {
     setCurrentRoom,
@@ -22,6 +24,9 @@ export default function WorkspacePage() {
     setSidebarWidth,
     setRightPanelWidth,
   } = useAppStore();
+
+  // Get the actual room identifier (either roomId or roomCode)
+  const roomIdentifier = roomId || roomCode;
 
   // Enable keyboard shortcuts
   const { showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
@@ -80,18 +85,18 @@ export default function WorkspacePage() {
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    if (roomId) {
-      setCurrentRoom(roomId);
+    if (roomIdentifier) {
+      setCurrentRoom(roomIdentifier);
     }
-  }, [roomId, setCurrentRoom]);
+  }, [roomIdentifier, setCurrentRoom]);
 
   // Show loading while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-black to-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-orange-500 rounded-xl animate-pulse mb-4 mx-auto"></div>
-          <p className="text-white/70">Loading...</p>
+          <p className="text-foreground/70">Loading...</p>
         </div>
       </div>
     );
@@ -102,16 +107,16 @@ export default function WorkspacePage() {
     return <Navigate to="/" replace />;
   }
 
-  if (!roomId) {
+  if (!roomIdentifier) {
     return <Navigate to="/join" replace />;
   }
 
   return (
     <>
       {/* Fixed Profile Header */}
-      <ProfileHeader fixed className="z-50" />
+      {/* <ProfileHeader fixed className="z-50" /> */}
 
-      <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-black to-slate-900 text-white overflow-hidden pt-20">
+      <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
         {/* Background effects matching login page */}
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/95 via-black/90 to-slate-900/95 pointer-events-none"></div>
 
@@ -140,7 +145,7 @@ export default function WorkspacePage() {
         {/* Content layer */}
         <div className="relative z-10 flex flex-col h-full">
           {/* Top Bar */}
-          <EditorTopbar roomId={roomId} />
+          <EditorTopbar roomId={roomIdentifier} />
 
           {/* Main Layout */}
           <div className="flex flex-1 overflow-hidden">
@@ -148,21 +153,21 @@ export default function WorkspacePage() {
             {!isLeftSidebarCollapsed && (
               <>
                 <div
-                  className="flex-shrink-0 border-r border-white/10 bg-gray-800/40 backdrop-blur-xl"
+                  className="flex-shrink-0 border-r border-border bg-card/40 backdrop-blur-xl z-50"
                   style={{ width: sidebarWidth }}
                 >
                   <FilesSidebar />
                 </div>
                 {/* Left Resize Handle */}
                 <div
-                  className="w-1 bg-white/10 hover:bg-orange-400 cursor-col-resize transition-colors"
+                  className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
                   onMouseDown={handleMouseDown("left")}
                 />
               </>
             )}
 
             {/* Notebook Area */}
-            <div className="flex-1 min-w-0 bg-gray-800/50 backdrop-blur-sm">
+            <div className="flex-1 min-w-0 bg-background backdrop-blur-sm">
               <NotebookArea />
             </div>
 
@@ -171,11 +176,11 @@ export default function WorkspacePage() {
               <>
                 {/* Right Resize Handle */}
                 <div
-                  className="w-1 bg-white/10 hover:bg-orange-400 cursor-col-resize transition-colors"
+                  className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
                   onMouseDown={handleMouseDown("right")}
                 />
                 <div
-                  className="flex-shrink-0 border-l border-white/10 bg-gray-800/40 backdrop-blur-xl"
+                  className="flex-shrink-0 border-l border-border bg-card/40 backdrop-blur-xl"
                   style={{ width: rightPanelWidth }}
                 >
                   <RightPanel />

@@ -106,22 +106,22 @@ export function VersionsPane() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-gray-700">
+      <div className="flex-shrink-0 p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <GitBranch className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-white">Versions</h3>
+            <h3 className="font-semibold text-foreground">Versions</h3>
           </div>
 
           {viewMode === "diff" && (
             <div className="flex items-center space-x-2">
-              <div className="flex bg-gray-700 rounded-md p-1">
+              <div className="flex bg-accent rounded-md p-1">
                 <button
                   onClick={() => setDiffTarget("blocks")}
                   className={`px-3 py-1 text-xs rounded ${
                     diffTarget === "blocks"
                       ? "bg-orange-500 text-white"
-                      : "text-gray-400 hover:text-white"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Blocks
@@ -131,7 +131,7 @@ export function VersionsPane() {
                   className={`px-3 py-1 text-xs rounded ${
                     diffTarget === "files"
                       ? "bg-orange-500 text-white"
-                      : "text-gray-400 hover:text-white"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Files
@@ -273,7 +273,6 @@ export function VersionsPane() {
                     original={getMilestoneContent(selectedMilestone)}
                     modified={getCurrentContent()}
                     language="python"
-                    theme="dark"
                     height="100%"
                     options={{
                       fontSize: 12,
