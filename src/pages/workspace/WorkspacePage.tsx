@@ -1,13 +1,47 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Navigate } from "react-router-dom";
-import { useAppStore } from "../../store/workspace";
+import { useAppStore, usePresenceStore } from "../../store/workspace";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useAuth } from "../../hooks/useAuth";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
-import { FilesSidebar } from "../../components/workspace/FilesSidebar";
+import { ActivityBar } from "../../components/workspace/ActivityBar";
+import { LeftSidebar } from "../../components/workspace/LeftSidebar";
 import { OptimizedNotebookArea } from "../../components/workspace/OptimizedNotebookArea";
 import { RightPanel } from "../../components/workspace/RightPanel";
 import { KeyboardShortcutsModal } from "../../components/modals/KeyboardShortcutsModal";
+import { apiClient, ApiRequestError } from "../../lib/apiClient";
+import { Button } from "../../components/ui/button";
+
+// Helper function to generate consistent colors for users
+function getColorForUser(userId: string): string {
+  const colors = [
+    "#FF6B6B",
+    "#4ECDC4",
+    "#45B7D1",
+    "#96CEB4",
+    "#FCEA2B",
+    "#FF9FF3",
+    "#54A0FF",
+    "#5F27CD",
+    "#00D2D3",
+    "#FF9F43",
+    "#10AC84",
+    "#EE5A24",
+    "#0ABDE3",
+    "#3867D6",
+    "#8854D0",
+  ];
+
+  // Simple hash function to get consistent color for user ID
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    const char = userId.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+
+  return colors[Math.abs(hash) % colors.length];
+}
 
 export default function WorkspacePage() {
   const { roomId, roomCode } = useParams<{
@@ -19,17 +53,29 @@ export default function WorkspacePage() {
     setCurrentRoom,
     sidebarWidth,
     rightPanelWidth,
+    activeActivity,
     isLeftSidebarCollapsed,
     isRightSidebarCollapsed,
     setSidebarWidth,
     setRightPanelWidth,
   } = useAppStore();
+  const { setCurrentUser } = usePresenceStore();
 
   // Get the actual room identifier (either roomId or roomCode)
   const roomIdentifier = roomId || roomCode;
 
+  // Room access validation state
+  const [roomAccessLoading, setRoomAccessLoading] = useState(true);
+  const [hasRoomAccess, setHasRoomAccess] = useState(false);
+  const [roomAccessError, setRoomAccessError] = useState<string | null>(null);
+
   // Enable keyboard shortcuts
   const { showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
+
+  // Determine if current activity needs fixed width
+  const needsFixedWidth =
+    activeActivity === "users" || activeActivity === "versions";
+  const currentSidebarWidth = needsFixedWidth ? 450 : sidebarWidth;
 
   // Resize state
   const [isResizing, setIsResizing] = useState(false);
@@ -49,7 +95,7 @@ export default function WorkspacePage() {
     (e: MouseEvent) => {
       if (!isResizing || !resizeType) return;
 
-      if (resizeType === "left") {
+      if (resizeType === "left" && !needsFixedWidth) {
         const newWidth = Math.max(200, Math.min(500, e.clientX));
         setSidebarWidth(newWidth);
       } else if (resizeType === "right") {
@@ -60,7 +106,13 @@ export default function WorkspacePage() {
         setRightPanelWidth(newWidth);
       }
     },
-    [isResizing, resizeType, setSidebarWidth, setRightPanelWidth]
+    [
+      isResizing,
+      resizeType,
+      needsFixedWidth,
+      setSidebarWidth,
+      setRightPanelWidth,
+    ]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -90,13 +142,98 @@ export default function WorkspacePage() {
     }
   }, [roomIdentifier, setCurrentRoom]);
 
-  // Show loading while checking auth
-  if (loading) {
+  // Validate room access when user and roomIdentifier are available
+  useEffect(() => {
+    let isMounted = true;
+
+    const validateRoomAccess = async () => {
+      if (!user || !roomIdentifier) {
+        setRoomAccessLoading(false);
+        return;
+      }
+
+      try {
+        setRoomAccessLoading(true);
+        setRoomAccessError(null);
+
+        // Try to get room participants to validate access
+        // If this fails, we'll fall back to checking with the room list
+        try {
+          await apiClient.getRoomParticipants(roomIdentifier);
+        } catch (participantsError) {
+          // If participants check fails, try a different validation approach
+          // We can try to get all rooms and see if this room exists and user has access
+          const roomsResponse = await apiClient.getAllRooms();
+          const hasAccess = roomsResponse.rooms?.some(
+            (room) =>
+              room.room_code === roomIdentifier ||
+              room.room_id.toString() === roomIdentifier
+          );
+
+          if (!hasAccess) {
+            throw participantsError; // Re-throw the original error
+          }
+        }
+
+        if (isMounted) {
+          setHasRoomAccess(true);
+          setRoomAccessError(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setHasRoomAccess(false);
+
+          if (error instanceof ApiRequestError) {
+            switch (error.statusCode) {
+              case 403:
+                setRoomAccessError("access_denied");
+                break;
+              case 404:
+                setRoomAccessError("room_not_found");
+                break;
+              default:
+                setRoomAccessError("unknown_error");
+            }
+          } else {
+            setRoomAccessError("unknown_error");
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setRoomAccessLoading(false);
+        }
+      }
+    };
+
+    validateRoomAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, roomIdentifier]);
+
+  // Set current user in presence store
+  useEffect(() => {
+    if (user) {
+      setCurrentUser({
+        id: user.id,
+        name: user.email?.split("@")[0] || "User",
+        email: user.email || "",
+        color: getColorForUser(user.id),
+        avatar: undefined,
+      });
+    }
+  }, [user, setCurrentUser]);
+
+  // Show loading while checking auth or room access
+  if (loading || roomAccessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-orange-500 rounded-xl animate-pulse mb-4 mx-auto"></div>
-          <p className="text-foreground/70">Loading...</p>
+          <p className="text-foreground/70">
+            {loading ? "Loading..." : "Validating room access..."}
+          </p>
         </div>
       </div>
     );
@@ -109,6 +246,68 @@ export default function WorkspacePage() {
 
   if (!roomIdentifier) {
     return <Navigate to="/join" replace />;
+  }
+
+  // Show 404-like page for room access errors (similar to GitHub's approach)
+  if (roomAccessError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-black to-slate-900">
+        <div className="text-center max-w-md">
+          <div className="w-24 h-24 bg-gray-700 rounded-xl flex items-center justify-center mb-6 mx-auto">
+            <div className="text-4xl">🔒</div>
+          </div>
+
+          {roomAccessError === "room_not_found" ? (
+            <>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                Room not found
+              </h1>
+              <p className="text-gray-400 mb-6">
+                The room you're looking for doesn't exist or has been deleted.
+              </p>
+            </>
+          ) : roomAccessError === "access_denied" ? (
+            <>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                Access denied
+              </h1>
+              <p className="text-gray-400 mb-6">
+                You don't have permission to access this room. Contact the room
+                owner to request access.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                Something went wrong
+              </h1>
+              <p className="text-gray-400 mb-6">
+                We encountered an error while trying to access this room.
+              </p>
+            </>
+          )}
+
+          <Button
+            onClick={() => (window.location.href = "/join")}
+            className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400"
+          >
+            Go to Rooms
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Only render the workspace if user has access
+  if (!hasRoomAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-orange-500 rounded-xl animate-pulse mb-4 mx-auto"></div>
+          <p className="text-foreground/70">Checking room access...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -149,20 +348,25 @@ export default function WorkspacePage() {
 
           {/* Main Layout */}
           <div className="flex flex-1 overflow-hidden">
-            {/* Files Sidebar */}
+            {/* Activity Bar (always visible) */}
+            <ActivityBar />
+
+            {/* Left Sidebar */}
             {!isLeftSidebarCollapsed && (
               <>
                 <div
                   className="flex-shrink-0 border-r border-border bg-card/40 backdrop-blur-xl z-50"
-                  style={{ width: sidebarWidth }}
+                  style={{ width: currentSidebarWidth }}
                 >
-                  <FilesSidebar />
+                  <LeftSidebar />
                 </div>
-                {/* Left Resize Handle */}
-                <div
-                  className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
-                  onMouseDown={handleMouseDown("left")}
-                />
+                {/* Left Resize Handle - only show for files, tests, and ai panels */}
+                {!needsFixedWidth && (
+                  <div
+                    className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
+                    onMouseDown={handleMouseDown("left")}
+                  />
+                )}
               </>
             )}
 

@@ -128,7 +128,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
         {/* Right Section */}
         <div className="flex items-center space-x-3">
           {/* Presence Avatars */}
-          <PresenceAvatars />
+          <PresenceAvatars roomId={roomId} />
 
           {/* Share Button */}
           <Button

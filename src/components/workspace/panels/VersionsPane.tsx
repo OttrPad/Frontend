@@ -107,51 +107,59 @@ export function VersionsPane() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex-shrink-0 p-4 border-b border-border">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2">
             <GitBranch className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-foreground">Versions</h3>
+            <h3 className="font-semibold text-foreground">Version Control</h3>
           </div>
 
-          {viewMode === "diff" && (
-            <div className="flex items-center space-x-2">
-              <div className="flex bg-accent rounded-md p-1">
-                <button
-                  onClick={() => setDiffTarget("blocks")}
-                  className={`px-3 py-1 text-xs rounded ${
-                    diffTarget === "blocks"
-                      ? "bg-orange-500 text-white"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Blocks
-                </button>
-                <button
-                  onClick={() => setDiffTarget("files")}
-                  className={`px-3 py-1 text-xs rounded ${
-                    diffTarget === "files"
-                      ? "bg-orange-500 text-white"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Files
-                </button>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setViewMode("list");
-                  selectMilestone(null);
-                }}
-                className="bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
-              >
-                Back to List
-              </Button>
+          {viewMode === "list" && (
+            <div className="text-xs text-muted-foreground">
+              {milestones.length} milestone{milestones.length !== 1 ? "s" : ""}
             </div>
           )}
         </div>
+
+        {viewMode === "diff" && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="flex bg-accent rounded-md p-1">
+                <button
+                  onClick={() => setDiffTarget("blocks")}
+                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                    diffTarget === "blocks"
+                      ? "bg-orange-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  }`}
+                >
+                  Code Blocks
+                </button>
+                <button
+                  onClick={() => setDiffTarget("files")}
+                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                    diffTarget === "files"
+                      ? "bg-orange-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  }`}
+                >
+                  Project Files
+                </button>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setViewMode("list");
+                selectMilestone(null);
+              }}
+              className="bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
+            >
+              ← Back to List
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -167,39 +175,80 @@ export function VersionsPane() {
                 </p>
               </div>
             ) : (
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-3">
                 {milestones
                   .sort((a, b) => b.createdAt - a.createdAt)
                   .map((milestone) => (
                     <div
                       key={milestone.id}
-                      className="bg-gray-700/50 border border-gray-600/50 rounded-lg p-4"
+                      className="bg-gray-700/50 border border-gray-600/50 rounded-lg p-4 hover:bg-gray-700/70 transition-colors"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <GitBranch className="w-4 h-4 text-orange-400" />
-                            <h4 className="font-medium text-white">
-                              {milestone.name}
-                            </h4>
-                          </div>
+                      {/* Header with title and actions */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          <GitBranch className="w-4 h-4 text-orange-400 flex-shrink-0" />
+                          <h4 className="font-medium text-white truncate">
+                            {milestone.name}
+                          </h4>
+                        </div>
 
-                          {milestone.notes && (
-                            <p className="text-gray-400 text-sm mb-3">
-                              {milestone.notes}
-                            </p>
-                          )}
+                        <div className="flex items-center space-x-1 flex-shrink-0 ml-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewDiff(milestone)}
+                            className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-400/20"
+                            title="View Diff"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
 
-                          <div className="flex items-center space-x-4 text-xs text-gray-500">
-                            <div className="flex items-center space-x-1">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                {formatTimestamp(milestone.createdAt)}
-                              </span>
-                            </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRestore(milestone)}
+                            className="h-7 w-7 p-0 text-green-400 hover:text-green-300 hover:bg-green-400/20"
+                            title="Restore"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(milestone)}
+                            className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-400/20"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      {milestone.notes && (
+                        <p className="text-gray-400 text-sm mb-3 leading-relaxed">
+                          {milestone.notes}
+                        </p>
+                      )}
+
+                      {/* Metadata in grid layout */}
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="flex items-center space-x-1 text-gray-500">
+                          <Clock className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">
+                            {formatTimestamp(milestone.createdAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end space-x-3 text-gray-500">
+                          <span className="flex items-center space-x-1">
+                            <span className="w-2 h-2 bg-orange-400 rounded-full"></span>
                             <span>
                               {milestone.snapshot.blocks.length} blocks
                             </span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
                             <span>
                               {
                                 milestone.snapshot.files.filter(
@@ -208,39 +257,7 @@ export function VersionsPane() {
                               }{" "}
                               files
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2 ml-4">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDiff(milestone)}
-                            className="h-8 px-2 text-blue-400 hover:text-blue-300"
-                            title="View Diff"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRestore(milestone)}
-                            className="h-8 px-2 text-green-400 hover:text-green-300"
-                            title="Restore"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(milestone)}
-                            className="h-8 px-2 text-red-400 hover:text-red-300"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          </span>
                         </div>
                       </div>
                     </div>
