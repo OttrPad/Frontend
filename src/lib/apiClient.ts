@@ -121,15 +121,49 @@ class ApiClient {
   }
 
   // Room API methods
-  async createRoom(name: string, description: string): Promise<ApiResponse> {
-    return this.request<ApiResponse>("/api/rooms", {
+  async createRoom(
+    name: string,
+    description: string
+  ): Promise<{
+    message: string;
+    room: {
+      id: string;
+      name: string;
+      description: string;
+      room_code: string;
+      created_at: string;
+      created_by: string;
+    };
+    creator: {
+      id: string;
+      email: string;
+    };
+  }> {
+    return this.request("/api/rooms", {
       method: "POST",
       body: JSON.stringify({ name, description }),
     });
   }
 
-  async getAllRooms(): Promise<ApiResponse> {
-    return this.request<ApiResponse>("/api/rooms");
+  async getAllRooms(): Promise<{
+    message: string;
+    rooms: Array<{
+      room_id: number;
+      name: string;
+      description: string;
+      room_code: string;
+      created_by: string;
+      created_at: string;
+      user_access: {
+        is_member: boolean;
+        is_creator: boolean;
+        user_type: "admin" | "editor" | "viewer" | null;
+      };
+    }>;
+    total: number;
+    hasMore: boolean;
+  }> {
+    return this.request("/api/rooms");
   }
 
   async getRoomDetails(id: string): Promise<ApiResponse> {
@@ -142,15 +176,31 @@ class ApiClient {
     });
   }
 
-  async joinRoom(roomIdOrCode: string): Promise<ApiResponse> {
+  async joinRoom(roomIdOrCode: string): Promise<{
+    message: string;
+    room: {
+      id: string;
+      name: string;
+      room_code?: string;
+    };
+    user: {
+      id: string;
+      email: string;
+    };
+    transition_info: {
+      user_type: "admin" | "editor" | "viewer";
+      transition_type: "creator_join" | "email_to_member";
+    };
+  }> {
     // If it looks like a room code (format: xxx-xxx-xxx), use the room code endpoint
     if (roomIdOrCode.includes("-") && roomIdOrCode.length === 11) {
-      return this.request<ApiResponse>(`/api/rooms/code/${roomIdOrCode}/join`, {
+      return this.request(`/api/rooms/join`, {
         method: "POST",
+        body: JSON.stringify({ room_code: roomIdOrCode }),
       });
     }
     // Otherwise, treat it as a room ID
-    return this.request<ApiResponse>(`/api/rooms/${roomIdOrCode}/join`, {
+    return this.request(`/api/rooms/${roomIdOrCode}/join`, {
       method: "POST",
     });
   }
@@ -163,6 +213,134 @@ class ApiClient {
     return this.request<ApiResponse>(`/api/rooms/${id}/leave`, {
       method: "DELETE",
     });
+  }
+
+  // Room access management methods
+  async getRoomAccess(roomIdentifier: string): Promise<{
+    message: string;
+    room: { id: string; name: string };
+    allowed_emails: Array<{
+      id: number;
+      email: string;
+      access_level: "viewer" | "editor";
+      invited_by: string;
+      invited_at: string;
+    }>;
+    total_count: number;
+  }> {
+    const roomId = await this.resolveRoomIdentifier(roomIdentifier);
+    return this.request(`/api/rooms/${roomId}/access`);
+  }
+
+  async addRoomAccess(
+    roomIdentifier: string,
+    email: string,
+    accessLevel: "viewer" | "editor",
+    userId: string
+  ): Promise<{
+    message: string;
+    allowed_email: {
+      id: number;
+      email: string;
+      access_level: string;
+      invited_at: string;
+    };
+  }> {
+    const roomId = await this.resolveRoomIdentifier(roomIdentifier);
+    return this.request(`/api/rooms/${roomId}/access/add`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        access_level: accessLevel,
+        user_id: userId,
+      }),
+    });
+  }
+
+  async updateRoomAccess(
+    roomIdentifier: string,
+    email: string,
+    accessLevel: "viewer" | "editor",
+    userId: string
+  ): Promise<{
+    message: string;
+    allowed_email: {
+      id: number;
+      email: string;
+      access_level: string;
+      invited_at: string;
+    };
+  }> {
+    const roomId = await this.resolveRoomIdentifier(roomIdentifier);
+    return this.request(`/api/rooms/${roomId}/access/update`, {
+      method: "PUT",
+      body: JSON.stringify({
+        email,
+        access_level: accessLevel,
+        user_id: userId,
+      }),
+    });
+  }
+
+  async removeRoomAccess(
+    roomIdentifier: string,
+    email: string
+  ): Promise<{ message: string }> {
+    const roomId = await this.resolveRoomIdentifier(roomIdentifier);
+    return this.request(`/api/rooms/${roomId}/access/remove`, {
+      method: "DELETE",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  // Participants methods
+  async getRoomParticipants(roomIdentifier: string): Promise<{
+    message: string;
+    roomId: string;
+    participants: Array<{
+      userId: string;
+      userEmail: string;
+      socketId: string;
+      joinedAt: number;
+    }>;
+    totalCount: number;
+  }> {
+    // First try to resolve the room identifier to get the numeric room ID
+    const roomId = await this.resolveRoomIdentifier(roomIdentifier);
+    return this.request(`/api/rooms/${roomId}/participants`);
+  }
+
+  // Helper method to resolve room code to room ID
+  private async resolveRoomIdentifier(identifier: string): Promise<string> {
+    // If it's already a numeric ID, return as is
+    if (/^\d+$/.test(identifier)) {
+      return identifier;
+    }
+
+    // If it's a room code (format: xxx-xxx-xxx), find the room and get its ID
+    if (/^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/.test(identifier)) {
+      try {
+        const response = await this.getAllRooms();
+        const room = response.rooms?.find((r) => r.room_code === identifier);
+        if (room) {
+          return room.room_id.toString();
+        } else {
+          throw new ApiRequestError("Room not found", "ROOM_NOT_FOUND", 404);
+        }
+      } catch (error) {
+        if (error instanceof ApiRequestError) {
+          throw error;
+        }
+        throw new ApiRequestError(
+          "Failed to resolve room identifier",
+          "RESOLUTION_ERROR",
+          500
+        );
+      }
+    }
+
+    // If we can't determine the format, assume it's a room ID
+    return identifier;
   }
 
   // Health check methods

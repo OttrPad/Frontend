@@ -7,6 +7,12 @@ import { Label } from "@/components/ui/label";
 import { apiClient, type Room, ApiRequestError } from "@/lib/apiClient";
 import { toast } from "react-toastify";
 
+// Extended Room interface to include fields from the API response
+interface ExtendedRoom extends Room {
+  room_code?: string;
+  original_room_id?: number; // Keep the original numeric ID for API calls
+}
+
 // Remove mock data - will be replaced with API data
 
 export function RoomManager() {
@@ -15,7 +21,7 @@ export function RoomManager() {
   const [roomCode, setRoomCode] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<ExtendedRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -35,13 +41,19 @@ export function RoomManager() {
       setIsLoading(true);
       const response = await apiClient.getAllRooms();
 
-      // Ensure we have a valid array
+      // Ensure we have a valid array and map to expected format
       if (response && Array.isArray(response.rooms)) {
-        setRooms(response.rooms);
-      } else if (response && response.rooms) {
-        // If rooms is not an array but exists, try to handle it
-        console.warn("Unexpected rooms format:", response.rooms);
-        setRooms([]);
+        const mappedRooms = response.rooms.map((room) => ({
+          id: room.room_id.toString(),
+          name: room.name,
+          description: room.description,
+          room_code: room.room_code,
+          created_at: room.created_at,
+          created_by: room.created_by,
+          updated_at: room.created_at, // Using created_at as fallback
+          original_room_id: room.room_id, // Preserve the original numeric ID
+        }));
+        setRooms(mappedRooms);
       } else {
         setRooms([]);
       }
@@ -91,23 +103,25 @@ export function RoomManager() {
       await apiClient.joinRoom(roomCode);
       toast.success("Successfully joined the room!");
 
-      // Navigate using room code route
-      navigate(`/room/${roomCode}`);
+      // Navigate to workspace using room code
+      navigate(`/workspace/${roomCode}`);
     } catch (error) {
       console.error("Failed to join room:", error);
 
       if (error instanceof ApiRequestError) {
-        switch (error.errorCode) {
-          case "ROOM_NOT_FOUND":
+        switch (error.statusCode) {
+          case 404:
             setFormErrors({ roomCode: "Room not found with this code" });
             toast.error("Room not found. Please check the room code.");
             break;
-          case "ALREADY_MEMBER":
+          case 409:
             toast.info("You are already a member of this room!");
-            navigate(`/room/${roomCode}`);
+            navigate(`/workspace/${roomCode}`);
             break;
-          case "ROOM_FULL":
-            toast.error("This room is full. Cannot join.");
+          case 403:
+            toast.error(
+              "Access denied. You don't have permission to join this room."
+            );
             break;
           default:
             toast.error(
@@ -154,15 +168,15 @@ export function RoomManager() {
       setNewRoomName("");
       setNewRoomDesc("");
 
-      // Navigate to the new room using room code if available, otherwise use room ID
+      // Refresh rooms list
+      fetchRooms();
+
+      // Navigate directly to the new room using room code
       if (response.room?.room_code) {
-        navigate(`/room/${response.room.room_code}`);
+        navigate(`/workspace/${response.room.room_code}`);
       } else if (response.room?.id) {
         navigate(`/workspace/${response.room.id}`);
       }
-
-      // Refresh rooms list
-      fetchRooms();
     } catch (error) {
       console.error("Failed to create room:", error);
 
@@ -202,32 +216,42 @@ export function RoomManager() {
     }
   };
 
-  const handleJoinExistingRoom = async (room: Room) => {
+  const handleJoinExistingRoom = async (room: ExtendedRoom) => {
     try {
-      await apiClient.joinRoom(room.id);
+      // Prefer room_code for joining, then original_room_id, fallback to string id
+      const joinIdentifier =
+        room.room_code || room.original_room_id?.toString() || room.id;
+      await apiClient.joinRoom(joinIdentifier);
       toast.success("Successfully joined the room!");
 
       // Navigate using room code if available, otherwise use room ID
       if (room.room_code) {
-        navigate(`/room/${room.room_code}`);
+        navigate(`/workspace/${room.room_code}`);
       } else {
         navigate(`/workspace/${room.id}`);
       }
     } catch (error) {
       console.error("Failed to join room:", error);
+      console.error("Room data:", room);
+      console.error(
+        "Join identifier used:",
+        room.room_code || room.original_room_id?.toString() || room.id
+      );
 
       if (error instanceof ApiRequestError) {
-        switch (error.errorCode) {
-          case "ALREADY_MEMBER":
+        switch (error.statusCode) {
+          case 409:
             toast.info("You are already a member of this room!");
             if (room.room_code) {
-              navigate(`/room/${room.room_code}`);
+              navigate(`/workspace/${room.room_code}`);
             } else {
               navigate(`/workspace/${room.id}`);
             }
             break;
-          case "ROOM_FULL":
-            toast.error("This room is full. Cannot join.");
+          case 403:
+            toast.error(
+              "Access denied. You don't have permission to join this room."
+            );
             break;
           default:
             toast.error(

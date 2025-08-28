@@ -96,14 +96,16 @@ interface AppState {
   currentRoom: string | null;
   sidebarWidth: number;
   rightPanelWidth: number;
-  rightPanelTab: "output" | "tests" | "versions" | "ai";
+  activeActivity: "files" | "users" | "tests" | "versions" | "ai";
   isLeftSidebarCollapsed: boolean;
   isRightSidebarCollapsed: boolean;
   toggleTheme: () => void;
   setCurrentRoom: (roomId: string) => void;
   setSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
-  setRightPanelTab: (tab: "output" | "tests" | "versions" | "ai") => void;
+  setActiveActivity: (
+    activity: "files" | "users" | "tests" | "versions" | "ai"
+  ) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
 }
@@ -608,7 +610,7 @@ export const useAppStore = create<AppState>()(
       currentRoom: null,
       sidebarWidth: 280,
       rightPanelWidth: 350,
-      rightPanelTab: "output",
+      activeActivity: "files",
       isLeftSidebarCollapsed: false,
       isRightSidebarCollapsed: false,
 
@@ -628,8 +630,8 @@ export const useAppStore = create<AppState>()(
         set({ rightPanelWidth: Math.max(300, Math.min(600, width)) });
       },
 
-      setRightPanelTab: (tab) => {
-        set({ rightPanelTab: tab });
+      setActiveActivity: (activity) => {
+        set({ activeActivity: activity });
       },
 
       toggleLeftSidebar: () => {
