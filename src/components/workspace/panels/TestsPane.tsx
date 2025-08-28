@@ -11,7 +11,7 @@ import {
   FileText,
   RefreshCw,
 } from "lucide-react";
-import { MonacoEditor } from "../../monaco/MonacoEditor";
+import { CodePreview } from "../../monaco/CodePreview";
 
 export function TestsPane() {
   const { testFiles, isRunningTests, runTests, runSingleTest } =
@@ -194,15 +194,12 @@ export function TestsPane() {
               {/* Test Content */}
               <div className="flex-1 flex flex-col">
                 <div className="flex-1">
-                  <MonacoEditor
-                    value={selectedTest.content}
-                    onChange={() => {}} // Read-only for now
+                  <CodePreview
+                    content={selectedTest.content}
                     language="python"
-                    readOnly
-                    options={{
-                      fontSize: 12,
-                      lineHeight: 18,
-                    }}
+                    onClick={() => {}} // Read-only, no click action needed
+                    className="h-full"
+                    minHeight={200}
                   />
                 </div>
 
