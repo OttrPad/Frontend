@@ -5,7 +5,7 @@ import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useAuth } from "../../hooks/useAuth";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
 import { FilesSidebar } from "../../components/workspace/FilesSidebar";
-import { NotebookArea } from "../../components/workspace/NotebookArea";
+import { OptimizedNotebookArea } from "../../components/workspace/OptimizedNotebookArea";
 import { RightPanel } from "../../components/workspace/RightPanel";
 import { KeyboardShortcutsModal } from "../../components/modals/KeyboardShortcutsModal";
 
@@ -168,7 +168,7 @@ export default function WorkspacePage() {
 
             {/* Notebook Area */}
             <div className="flex-1 min-w-0 bg-background backdrop-blur-sm">
-              <NotebookArea />
+              <OptimizedNotebookArea />
             </div>
 
             {/* Right Panel */}
