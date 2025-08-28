@@ -39,11 +39,14 @@ export function UsersPane({ roomId }: UsersPaneProps) {
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [roomCode, setRoomCode] = useState<string>("");
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
 
   // Cache room information to avoid repeated API calls
   const [roomInfo, setRoomInfo] = useState<{
     id: string;
     created_by: string;
+    room_code?: string;
     cached_at: number;
   } | null>(null);
 
@@ -114,26 +117,35 @@ export function UsersPane({ roomId }: UsersPaneProps) {
           currentRoomInfo = {
             id: currentRoom.room_id.toString(),
             created_by: currentRoom.created_by,
+            room_code: currentRoom.room_code,
             cached_at: now,
           };
           setRoomInfo(currentRoomInfo);
+          setRoomCode(currentRoom.room_code || "");
         }
       }
 
       // Try to get participants using the new API endpoint first
       try {
         console.log("Fetching participants for room:", roomId);
-        const participantsResponse = await apiClient.getRoomParticipants(roomId);
+        const participantsResponse = await apiClient.getRoomParticipants(
+          roomId
+        );
         console.log("Participants response:", participantsResponse);
-        
+
         // Map the response to ensure consistency
-        const allUsers: Participant[] = (participantsResponse.participants || []).map((p) => {
+        const allUsers: Participant[] = (
+          participantsResponse.participants || []
+        ).map((p) => {
           // For members, determine if they're admin based on creator status
           let userType = p.user_type;
-          if (p.status === "member" && p.user_id === currentRoomInfo?.created_by) {
+          if (
+            p.status === "member" &&
+            p.user_id === currentRoomInfo?.created_by
+          ) {
             userType = "admin";
           }
-          
+
           return {
             user_id: p.user_id || "",
             email: p.email || "",
@@ -150,11 +162,18 @@ export function UsersPane({ roomId }: UsersPaneProps) {
         setIsAdmin(currentRoomInfo?.created_by === currentUser?.id);
         setError(null);
       } catch (participantsError) {
-        console.warn("New participants endpoint failed, falling back to old method:", participantsError);
-        
+        console.warn(
+          "New participants endpoint failed, falling back to old method:",
+          participantsError
+        );
+
         // Fallback to old method
-        console.log("Using fallback method to fetch participants and invited users");
-        const participantsResponse = await apiClient.getRoomParticipants(roomId);
+        console.log(
+          "Using fallback method to fetch participants and invited users"
+        );
+        const participantsResponse = await apiClient.getRoomParticipants(
+          roomId
+        );
 
         // Get invited users (allowed_emails) if user is admin
         let invitedUsers: Array<{
@@ -169,7 +188,10 @@ export function UsersPane({ roomId }: UsersPaneProps) {
         if (isRoomCreator) {
           try {
             const accessResponse = await apiClient.getRoomAccess(roomId);
-            console.log("Invited users (allowed_emails):", accessResponse.allowed_emails);
+            console.log(
+              "Invited users (allowed_emails):",
+              accessResponse.allowed_emails
+            );
             invitedUsers = accessResponse.allowed_emails || [];
           } catch (err) {
             console.log(
@@ -239,7 +261,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
         setParticipants(allUsers);
         setIsAdmin(isRoomCreator);
       }
-      
+
       setError(null);
     } catch (err) {
       console.error("Failed to load room participants:", err);
@@ -267,27 +289,27 @@ export function UsersPane({ roomId }: UsersPaneProps) {
     try {
       setIsAddingUser(true);
       console.log("Adding user:", newUserEmail, "with access:", newUserAccess);
-      
+
       await apiClient.addRoomAccess(
         roomId,
         newUserEmail,
         newUserAccess,
         currentUser.id
       );
-      
+
       console.log("User added successfully, refreshing participants...");
-      
+
       // Clear cache to force fresh data
       setRoomInfo(null);
-      
+
       // Refresh participants
       await loadParticipants();
-      
+
       setNewUserEmail("");
       setNewUserAccess("viewer");
       setShowAddUser(false);
       setError(null);
-      
+
       console.log("Participants refreshed after adding user");
     } catch (err) {
       console.error("Failed to add user:", err);
@@ -331,6 +353,31 @@ export function UsersPane({ roomId }: UsersPaneProps) {
     },
     [roomId, loadParticipants]
   );
+
+  const handleJoinRoom = useCallback(async () => {
+    if (!roomCode || !currentUser?.id) return;
+
+    try {
+      setIsJoiningRoom(true);
+      console.log("Joining room with code:", roomCode);
+
+      await apiClient.joinRoom(roomCode);
+      console.log("Successfully joined room, refreshing participants...");
+
+      // Clear cache to force fresh data
+      setRoomInfo(null);
+
+      // Refresh participants to show updated status
+      await loadParticipants();
+
+      setError(null);
+    } catch (err) {
+      console.error("Failed to join room:", err);
+      setError("Failed to join room");
+    } finally {
+      setIsJoiningRoom(false);
+    }
+  }, [roomCode, currentUser?.id, loadParticipants]);
 
   const getAccessLevelBadge = (userType: "admin" | "editor" | "viewer") => {
     const baseClasses =
@@ -385,6 +432,32 @@ export function UsersPane({ roomId }: UsersPaneProps) {
           {error}
         </div>
       )}
+
+      {/* Join Room Invitation Banner - Show if current user is invited */}
+      {currentUser?.email &&
+        participants.some(
+          (p) => p.email === currentUser.email && p.status === "invited"
+        ) &&
+        roomCode && (
+          <div className="bg-green-500/20 border border-green-500/30 text-green-400 px-4 py-3 rounded-md text-sm backdrop-blur-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">You're invited to this room!</div>
+                <div className="text-xs text-green-300 mt-1">
+                  Click the button to join and start collaborating
+                </div>
+              </div>
+              <Button
+                onClick={handleJoinRoom}
+                disabled={isJoiningRoom}
+                size="sm"
+                className="bg-gradient-to-r from-green-400 to-green-500 text-black hover:from-green-300 hover:to-green-400 font-medium ml-3"
+              >
+                {isJoiningRoom ? "Joining..." : "Join Now"}
+              </Button>
+            </div>
+          </div>
+        )}
 
       {/* Add User Section - Only show for admins */}
       {isAdmin && showAddUser && (
@@ -577,6 +650,22 @@ export function UsersPane({ roomId }: UsersPaneProps) {
                         className="h-8 w-8 p-0 text-red-400 hover:text-red-300 hover:bg-red-400/20 border border-red-400/30 hover:border-red-400/50"
                       >
                         <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+
+                {/* Join Room Button - Show for current user if they are invited */}
+                {participant.email === currentUser?.email &&
+                  participant.status === "invited" &&
+                  roomCode && (
+                    <div className="flex items-center">
+                      <Button
+                        onClick={handleJoinRoom}
+                        disabled={isJoiningRoom}
+                        size="sm"
+                        className="bg-gradient-to-r from-green-400 to-green-500 text-black hover:from-green-300 hover:to-green-400 font-medium"
+                      >
+                        {isJoiningRoom ? "Joining..." : "Join Room"}
                       </Button>
                     </div>
                   )}
