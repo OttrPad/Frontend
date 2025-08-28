@@ -16,17 +16,11 @@ import type {
 interface FilesState {
   files: FileNode[];
   selectedFileId: string | null;
-  expandedFolders: Set<string>;
-  addFile: (
-    parentId: string | null,
-    name: string,
-    type: "file" | "folder"
-  ) => void;
+  addFile: (name: string, type: "file") => void;
   deleteFile: (id: string) => void;
   renameFile: (id: string, newName: string) => void;
   updateFileContent: (id: string, content: string) => void;
   selectFile: (id: string | null) => void;
-  toggleFolder: (id: string) => void;
   moveFile: (sourceId: string, targetId: string) => void;
   getFileById: (id: string) => FileNode | undefined;
   getFilePath: (id: string) => string;
@@ -102,58 +96,32 @@ interface AppState {
   currentRoom: string | null;
   sidebarWidth: number;
   rightPanelWidth: number;
-  rightPanelTab: "output" | "tests" | "versions" | "ai";
+  activeActivity: "files" | "users" | "tests" | "versions" | "ai";
   isLeftSidebarCollapsed: boolean;
   isRightSidebarCollapsed: boolean;
   toggleTheme: () => void;
   setCurrentRoom: (roomId: string) => void;
   setSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
-  setRightPanelTab: (tab: "output" | "tests" | "versions" | "ai") => void;
+  setActiveActivity: (
+    activity: "files" | "users" | "tests" | "versions" | "ai"
+  ) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
 }
 
 // Helper functions
-
-// Helper functions
-const generatePath = (
-  files: FileNode[],
-  fileId: string,
-  currentPath = ""
-): string => {
-  for (const file of files) {
-    const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-    if (file.id === fileId) {
-      return fullPath;
-    }
-    if (file.children) {
-      const childPath = generatePath(file.children, fileId, fullPath);
-      if (childPath) return childPath;
-    }
-  }
-  return "";
+const generatePath = (files: FileNode[], fileId: string): string => {
+  const file = files.find((f) => f.id === fileId);
+  return file ? file.name : "";
 };
 
 const findFileById = (files: FileNode[], id: string): FileNode | undefined => {
-  for (const file of files) {
-    if (file.id === id) return file;
-    if (file.children) {
-      const found = findFileById(file.children, id);
-      if (found) return found;
-    }
-  }
-  return undefined;
+  return files.find((file) => file.id === id);
 };
 
 const removeFileById = (files: FileNode[], id: string): FileNode[] => {
-  return files.filter((file) => {
-    if (file.id === id) return false;
-    if (file.children) {
-      file.children = removeFileById(file.children, id);
-    }
-    return true;
-  });
+  return files.filter((file) => file.id !== id);
 };
 
 // Create stores
@@ -162,66 +130,27 @@ export const useFilesStore = create<FilesState>()(
     (set, get) => ({
       files: [
         {
-          id: "root-src",
-          name: "src",
-          type: "folder",
-          path: "src",
-          children: [
-            {
-              id: "main-py",
-              name: "main.py",
-              type: "file",
-              path: "src/main.py",
-              content: '# Welcome to your workspace\nprint("Hello, World!")\n',
-            },
-          ],
-        },
-        {
-          id: "root-tests",
-          name: "tests",
-          type: "folder",
-          path: "tests",
-          children: [],
+          id: "main-py",
+          name: "main.py",
+          type: "file",
+          path: "main.py",
+          content: '# Welcome to your workspace\nprint("Hello, World!")\n',
         },
       ],
       selectedFileId: null,
-      expandedFolders: new Set(["root-src"]),
 
-      addFile: (parentId, name, type) => {
+      addFile: (name, type) => {
         const newFile: FileNode = {
           id: uuidv4(),
           name,
           type,
           path: "",
-          ...(type === "folder" ? { children: [] } : { content: "" }),
+          content: "",
         };
 
         set((state) => {
-          const addToParent = (files: FileNode[]): FileNode[] => {
-            if (!parentId) {
-              newFile.path = name;
-              return [...files, newFile];
-            }
-
-            return files.map((file) => {
-              if (file.id === parentId && file.type === "folder") {
-                newFile.path = `${file.path}/${name}`;
-                return {
-                  ...file,
-                  children: [...(file.children || []), newFile],
-                };
-              }
-              if (file.children) {
-                return {
-                  ...file,
-                  children: addToParent(file.children),
-                };
-              }
-              return file;
-            });
-          };
-
-          return { files: addToParent(state.files) };
+          newFile.path = name;
+          return { files: [...state.files, newFile] };
         });
       },
 
@@ -234,57 +163,23 @@ export const useFilesStore = create<FilesState>()(
       },
 
       renameFile: (id, newName) => {
-        set((state) => {
-          const updateFile = (files: FileNode[]): FileNode[] => {
-            return files.map((file) => {
-              if (file.id === id) {
-                const pathParts = file.path.split("/");
-                pathParts[pathParts.length - 1] = newName;
-                return { ...file, name: newName, path: pathParts.join("/") };
-              }
-              if (file.children) {
-                return { ...file, children: updateFile(file.children) };
-              }
-              return file;
-            });
-          };
-
-          return { files: updateFile(state.files) };
-        });
+        set((state) => ({
+          files: state.files.map((file) =>
+            file.id === id ? { ...file, name: newName, path: newName } : file
+          ),
+        }));
       },
 
       updateFileContent: (id, content) => {
-        set((state) => {
-          const updateFile = (files: FileNode[]): FileNode[] => {
-            return files.map((file) => {
-              if (file.id === id) {
-                return { ...file, content };
-              }
-              if (file.children) {
-                return { ...file, children: updateFile(file.children) };
-              }
-              return file;
-            });
-          };
-
-          return { files: updateFile(state.files) };
-        });
+        set((state) => ({
+          files: state.files.map((file) =>
+            file.id === id ? { ...file, content } : file
+          ),
+        }));
       },
 
       selectFile: (id) => {
         set({ selectedFileId: id });
-      },
-
-      toggleFolder: (id) => {
-        set((state) => {
-          const newExpanded = new Set(state.expandedFolders);
-          if (newExpanded.has(id)) {
-            newExpanded.delete(id);
-          } else {
-            newExpanded.add(id);
-          }
-          return { expandedFolders: newExpanded };
-        });
       },
 
       moveFile: (sourceId, targetId) => {
@@ -715,7 +610,7 @@ export const useAppStore = create<AppState>()(
       currentRoom: null,
       sidebarWidth: 280,
       rightPanelWidth: 350,
-      rightPanelTab: "output",
+      activeActivity: "files",
       isLeftSidebarCollapsed: false,
       isRightSidebarCollapsed: false,
 
@@ -735,8 +630,8 @@ export const useAppStore = create<AppState>()(
         set({ rightPanelWidth: Math.max(300, Math.min(600, width)) });
       },
 
-      setRightPanelTab: (tab) => {
-        set({ rightPanelTab: tab });
+      setActiveActivity: (activity) => {
+        set({ activeActivity: activity });
       },
 
       toggleLeftSidebar: () => {

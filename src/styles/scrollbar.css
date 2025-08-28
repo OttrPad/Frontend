@@ -1,21 +1,42 @@
-/* Custom scrollbar styles for dark theme */
+/* Custom scrollbar styles with theme support */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
+/* Light theme scrollbar track */
 ::-webkit-scrollbar-track {
+  background: rgba(249, 250, 251, 0.5); /* gray-50 with opacity */
+  border-radius: 4px;
+}
+
+/* Dark theme scrollbar track */
+.dark ::-webkit-scrollbar-track {
   background: rgba(31, 41, 55, 0.5); /* gray-800 with opacity */
   border-radius: 4px;
 }
 
+/* Light theme scrollbar thumb */
 ::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.8); /* gray-400 with opacity */
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+/* Dark theme scrollbar thumb */
+.dark ::-webkit-scrollbar-thumb {
   background: rgba(107, 114, 128, 0.8); /* gray-500 with opacity */
   border-radius: 4px;
   transition: background-color 0.2s ease;
 }
 
+/* Light theme scrollbar thumb hover */
 ::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.9); /* gray-500 with opacity */
+}
+
+/* Dark theme scrollbar thumb hover */
+.dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(156, 163, 175, 0.9); /* gray-400 with opacity */
 }
 
@@ -26,6 +47,15 @@
 /* Hide scrollbar for Firefox */
 * {
   scrollbar-width: thin;
+}
+
+/* Light theme Firefox scrollbar */
+* {
+  scrollbar-color: rgba(156, 163, 175, 0.8) rgba(249, 250, 251, 0.5);
+}
+
+/* Dark theme Firefox scrollbar */
+.dark * {
   scrollbar-color: rgba(107, 114, 128, 0.8) rgba(31, 41, 55, 0.5);
 }
 

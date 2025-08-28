@@ -3,16 +3,45 @@
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(31, 41, 55, 0.4);
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  z-index: 1;
+  isolation: isolate; /* Create a new stacking context */
+}
+
+/* Dark theme styles */
+.dark .monaco-editor-container {
+  background: rgba(31, 41, 55, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 /* Ensure Monaco editor is visible with glassmorphism */
 .monaco-editor {
-  background-color: rgba(31, 41, 55, 0.6) !important;
+  background-color: rgba(255, 255, 255, 0.6) !important;
   backdrop-filter: blur(20px);
+  position: relative;
+  z-index: 1 !important;
+}
+
+/* Override Monaco Editor widget z-index to prevent interference with dropdowns */
+.monaco-editor .monaco-editor-hover,
+.monaco-editor .suggest-widget,
+.monaco-editor .editor-widget,
+.monaco-editor .monaco-hover,
+.monaco-editor .monaco-scrollable-element {
+  z-index: 1000 !important;
+}
+
+/* Ensure block dropdowns always appear on top */
+.block-dropdown-menu {
+  z-index: 9999 !important;
+}
+
+.dark .monaco-editor {
+  background-color: rgba(31, 41, 55, 0.6) !important;
 }
 
 .monaco-editor .view-lines {
@@ -20,16 +49,28 @@
 }
 
 .monaco-editor .monaco-editor-background {
-  background-color: rgba(31, 41, 55, 0.6) !important;
+  background-color: rgba(255, 255, 255, 0.6) !important;
   backdrop-filter: blur(20px);
+}
+
+.dark .monaco-editor .monaco-editor-background {
+  background-color: rgba(31, 41, 55, 0.6) !important;
 }
 
 /* Enhanced text visibility with orange accents */
 .monaco-editor .view-line {
+  color: #1f2937 !important;
+}
+
+.dark .monaco-editor .view-line {
   color: #e5e5e5 !important;
 }
 
 .monaco-editor .mtk1 {
+  color: #1f2937 !important;
+}
+
+.dark .monaco-editor .mtk1 {
   color: #e5e5e5 !important;
 }
 
@@ -42,6 +83,10 @@
 
 /* Line numbers with orange accents */
 .monaco-editor .line-numbers {
+  color: #64748b !important;
+}
+
+.dark .monaco-editor .line-numbers {
   color: #94a3b8 !important;
 }
 
@@ -62,6 +107,11 @@
 
 /* Current line highlight */
 .monaco-editor .current-line {
+  background-color: rgba(251, 146, 61, 0.05) !important;
+  border: 1px solid rgba(251, 146, 61, 0.1) !important;
+}
+
+.dark .monaco-editor .current-line {
   background-color: rgba(255, 255, 255, 0.02) !important;
   border: 1px solid rgba(251, 146, 61, 0.1) !important;
 }
@@ -74,9 +124,13 @@
 
 /* Scrollbar improvements with glassmorphism */
 .monaco-editor .monaco-scrollable-element .scrollbar {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
   backdrop-filter: blur(10px);
   border-radius: 6px;
+}
+
+.dark .monaco-editor .monaco-scrollable-element .scrollbar {
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .monaco-editor .monaco-scrollable-element .scrollbar .slider {

@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   File,
-  Folder,
-  FolderOpen,
   Plus,
   MoreVertical,
   FileText,
@@ -17,22 +15,14 @@ import { ContextMenu } from "./ContextMenu";
 import { RenameDialog } from "../modals/RenameDialog";
 
 export function FilesSidebar() {
-  const {
-    files,
-    selectedFileId,
-    expandedFolders,
-    selectFile,
-    toggleFolder,
-    addFile,
-    deleteFile,
-    renameFile,
-  } = useFilesStore();
+  const { files, selectedFileId, selectFile, addFile, deleteFile, renameFile } =
+    useFilesStore();
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     fileId: string;
-    fileType: "file" | "folder";
+    fileType: "file";
   } | null>(null);
   const [renameDialog, setRenameDialog] = useState<{
     fileId: string;
@@ -49,15 +39,9 @@ export function FilesSidebar() {
     });
   };
 
-  const handleNewFile = (parentId: string | null = null) => {
+  const handleNewFile = () => {
     const name = `untitled${Date.now()}.py`;
-    addFile(parentId, name, "file");
-    setContextMenu(null);
-  };
-
-  const handleNewFolder = (parentId: string | null = null) => {
-    const name = `folder${Date.now()}`;
-    addFile(parentId, name, "folder");
+    addFile(name, "file");
     setContextMenu(null);
   };
 
@@ -82,20 +66,7 @@ export function FilesSidebar() {
     {
       label: "New File",
       icon: FileText,
-      onClick: () =>
-        contextMenu &&
-        handleNewFile(
-          contextMenu.fileType === "folder" ? contextMenu.fileId : null
-        ),
-    },
-    {
-      label: "New Folder",
-      icon: Folder,
-      onClick: () =>
-        contextMenu &&
-        handleNewFolder(
-          contextMenu.fileType === "folder" ? contextMenu.fileId : null
-        ),
+      onClick: () => contextMenu && handleNewFile(),
     },
     { separator: true },
     {
@@ -131,14 +102,7 @@ export function FilesSidebar() {
     files: FileNode[],
     id: string
   ): FileNode | undefined => {
-    for (const file of files) {
-      if (file.id === id) return file;
-      if (file.children) {
-        const found = findFileById(file.children, id);
-        if (found) return found;
-      }
-    }
-    return undefined;
+    return files.find((file) => file.id === id);
   };
 
   const renderFileTree = (nodes: FileNode[], level = 0) => {
@@ -146,39 +110,25 @@ export function FilesSidebar() {
       <div key={node.id}>
         <div
           className={`
-            flex items-center px-2 py-1 hover:bg-gray-700 cursor-pointer group
+            flex items-center px-2 py-1 hover:bg-sidebar-accent cursor-pointer group
             ${
               selectedFileId === node.id
-                ? "bg-gray-700 text-orange-400"
-                : "text-gray-300"
+                ? "bg-sidebar-accent text-sidebar-primary"
+                : "text-sidebar-foreground"
             }
           `}
           style={{ paddingLeft: `${8 + level * 16}px` }}
-          onClick={() => {
-            if (node.type === "folder") {
-              toggleFolder(node.id);
-            } else {
-              selectFile(node.id);
-            }
-          }}
+          onClick={() => selectFile(node.id)}
           onContextMenu={(e) => handleContextMenu(e, node)}
         >
-          {node.type === "folder" ? (
-            expandedFolders.has(node.id) ? (
-              <FolderOpen className="w-4 h-4 mr-2 text-orange-400" />
-            ) : (
-              <Folder className="w-4 h-4 mr-2 text-orange-400" />
-            )
-          ) : (
-            <File className="w-4 h-4 mr-2 text-blue-400" />
-          )}
+          <File className="w-4 h-4 mr-2 text-sidebar-primary" />
 
           <span className="flex-1 text-sm truncate">{node.name}</span>
 
           <Button
             variant="ghost"
             size="sm"
-            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-gray-400 hover:text-white"
+            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
             onClick={(e) => {
               e.stopPropagation();
               handleContextMenu(e, node);
@@ -187,40 +137,28 @@ export function FilesSidebar() {
             <MoreVertical className="w-3 h-3" />
           </Button>
         </div>
-
-        {node.type === "folder" &&
-          node.children &&
-          expandedFolders.has(node.id) &&
-          renderFileTree(node.children, level + 1)}
       </div>
     ));
   };
 
   return (
     <>
-      <div className="h-full bg-gray-800 flex flex-col">
+      <div className="h-full bg-sidebar flex flex-col">
         {/* Header */}
-        <div className="p-3 border-b border-gray-700">
+        <div className="p-3 border-b border-sidebar-border">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Files</h3>
+            <h3 className="text-sm font-semibold text-sidebar-foreground">
+              Files
+            </h3>
             <div className="flex space-x-1">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => handleNewFile()}
-                className="h-6 w-6 p-0 text-gray-400 hover:text-white"
+                className="h-6 w-6 p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                 title="New File"
               >
                 <Plus className="w-3 h-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleNewFolder()}
-                className="h-6 w-6 p-0 text-gray-400 hover:text-white"
-                title="New Folder"
-              >
-                <Folder className="w-3 h-3" />
               </Button>
             </div>
           </div>
@@ -231,8 +169,8 @@ export function FilesSidebar() {
           {files.length > 0 ? (
             <div className="py-2">{renderFileTree(files)}</div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-32 text-gray-500">
-              <Folder className="w-8 h-8 mb-2" />
+            <div className="flex flex-col items-center justify-center h-32 text-sidebar-foreground/60">
+              <File className="w-8 h-8 mb-2" />
               <p className="text-sm">No files yet</p>
               <p className="text-xs">Create a file to get started</p>
             </div>

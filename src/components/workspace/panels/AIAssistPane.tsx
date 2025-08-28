@@ -48,7 +48,7 @@ export function AIAssistPane() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Bot className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-white">AI Assist</h3>
+            <h3 className="font-semibold text-foreground">AI Assist</h3>
             {isLoading && (
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
             )}
@@ -59,7 +59,7 @@ export function AIAssistPane() {
               variant="ghost"
               size="sm"
               onClick={clearMessages}
-              className="text-gray-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
               title="Clear Chat"
             >
               <Trash2 className="w-4 h-4" />
@@ -85,7 +85,7 @@ export function AIAssistPane() {
                 onClick={() =>
                   setInput("Help me write a Python function to sort a list")
                 }
-                className="w-full p-3 text-left text-sm bg-gray-700/30 border border-gray-600/50 rounded-lg hover:bg-gray-700/50 transition-colors"
+                className="w-full p-3 text-left text-sm bg-card/30 border border-border rounded-lg hover:bg-card/50 transition-colors text-foreground"
               >
                 💡 Help me write a Python function
               </button>
@@ -93,13 +93,13 @@ export function AIAssistPane() {
                 onClick={() =>
                   setInput("Review my code and suggest improvements")
                 }
-                className="w-full p-3 text-left text-sm bg-gray-700/30 border border-gray-600/50 rounded-lg hover:bg-gray-700/50 transition-colors"
+                className="w-full p-3 text-left text-sm bg-card/30 border border-border rounded-lg hover:bg-card/50 transition-colors text-foreground"
               >
                 🔍 Review my code
               </button>
               <button
                 onClick={() => setInput("Explain this algorithm step by step")}
-                className="w-full p-3 text-left text-sm bg-gray-700/30 border border-gray-600/50 rounded-lg hover:bg-gray-700/50 transition-colors"
+                className="w-full p-3 text-left text-sm bg-card/30 border border-border rounded-lg hover:bg-card/50 transition-colors text-foreground"
               >
                 📚 Explain an algorithm
               </button>
@@ -119,8 +119,8 @@ export function AIAssistPane() {
                     max-w-[80%] rounded-lg p-4 space-y-3
                     ${
                       message.role === "user"
-                        ? "bg-orange-500/20 border border-orange-500/30 text-white"
-                        : "bg-gray-700/50 border border-gray-600/50 text-gray-200"
+                        ? "bg-orange-500/20 border border-orange-500/30 text-foreground"
+                        : "bg-card/50 border border-border text-foreground"
                     }
                   `}
                 >
@@ -131,11 +131,11 @@ export function AIAssistPane() {
                     ) : (
                       <Bot className="w-4 h-4 text-blue-400" />
                     )}
-                    <span className="text-gray-400">
+                    <span className="text-muted-foreground">
                       {message.role === "user" ? "You" : "AI Assistant"}
                     </span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-gray-500">
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-muted-foreground">
                       {formatTimestamp(message.timestamp)}
                     </span>
                   </div>
@@ -224,7 +224,7 @@ export function AIAssistPane() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything about your code..."
-            className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder:text-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 focus:outline-none resize-none"
+            className="flex-1 px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 focus:outline-none resize-none"
             rows={2}
             disabled={isLoading}
           />
