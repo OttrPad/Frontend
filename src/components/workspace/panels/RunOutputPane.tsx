@@ -30,7 +30,7 @@ export function RunOutputPane() {
       case "failed":
         return <XCircle className="w-4 h-4 text-red-400" />;
       default:
-        return <Terminal className="w-4 h-4 text-gray-400" />;
+        return <Terminal className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -41,7 +41,7 @@ export function RunOutputPane() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Terminal className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-white">Run Output</h3>
+            <h3 className="font-semibold text-foreground">Run Output</h3>
             {isRunning && (
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
             )}
@@ -52,7 +52,7 @@ export function RunOutputPane() {
               variant="ghost"
               size="sm"
               onClick={clearOutputs}
-              className="text-gray-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
               title="Clear All"
             >
               <Trash2 className="w-4 h-4" />
@@ -64,10 +64,10 @@ export function RunOutputPane() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {outputs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Terminal className="w-12 h-12 mb-4" />
             <p className="text-sm">No output yet</p>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-muted-foreground/70">
               Run a block to see output here
             </p>
           </div>
@@ -76,7 +76,7 @@ export function RunOutputPane() {
             {outputs.map((output) => (
               <div
                 key={output.id}
-                className="bg-gray-700/50 border border-gray-600/50 rounded-lg p-4 space-y-3"
+                className="bg-card/50 border border-border rounded-lg p-4 space-y-3"
               >
                 {/* Output Header */}
                 <div className="flex items-center justify-between text-sm">
@@ -113,7 +113,7 @@ export function RunOutputPane() {
 
                 {/* Output */}
                 {output.output && (
-                  <pre className="text-gray-300 text-sm font-mono whitespace-pre-wrap bg-black/20 rounded p-3 border border-gray-600/30 max-h-48 overflow-y-auto">
+                  <pre className="text-foreground/90 text-sm font-mono whitespace-pre-wrap bg-muted/20 rounded p-3 border border-border/30 max-h-48 overflow-y-auto">
                     {output.output}
                   </pre>
                 )}

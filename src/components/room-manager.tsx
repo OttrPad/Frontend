@@ -4,8 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient, type Room } from "@/lib/apiClient";
+import { apiClient, type Room, ApiRequestError } from "@/lib/apiClient";
 import { toast } from "react-toastify";
+
+// Extended Room interface to include fields from the API response
+interface ExtendedRoom extends Room {
+  room_code?: string;
+  original_room_id?: number; // Keep the original numeric ID for API calls
+}
 
 // Remove mock data - will be replaced with API data
 
@@ -16,10 +22,15 @@ export function RoomManager() {
   const [userId, setUserId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<ExtendedRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [formErrors, setFormErrors] = useState<{
+    roomName?: string;
+    roomDesc?: string;
+    roomCode?: string;
+  }>({});
 
   // Fetch rooms on component mount
   useEffect(() => {
@@ -30,75 +41,232 @@ export function RoomManager() {
     try {
       setIsLoading(true);
       const response = await apiClient.getAllRooms();
-      setRooms(response.rooms || []);
+
+      // Ensure we have a valid array and map to expected format
+      if (response && Array.isArray(response.rooms)) {
+        const mappedRooms = response.rooms.map((room) => ({
+          id: room.room_id.toString(),
+          name: room.name,
+          description: room.description,
+          room_code: room.room_code,
+          created_at: room.created_at,
+          created_by: room.created_by,
+          updated_at: room.created_at, // Using created_at as fallback
+          original_room_id: room.room_id, // Preserve the original numeric ID
+        }));
+        setRooms(mappedRooms);
+      } else {
+        setRooms([]);
+      }
     } catch (error) {
       console.error("Failed to fetch rooms:", error);
-      toast.error("Failed to load rooms. Please try again.");
+
+      if (error instanceof ApiRequestError) {
+        switch (error.statusCode) {
+          case 401:
+            toast.error("Authentication required. Please log in again.");
+            break;
+          case 403:
+            toast.error("Access denied. Please check your permissions.");
+            break;
+          case 500:
+            toast.error("Server error. Please try again later.");
+            break;
+          default:
+            toast.error(
+              error.message || "Failed to load rooms. Please try again."
+            );
+        }
+      } else {
+        toast.error("Failed to load rooms. Please check your connection.");
+      }
+
+      // Set empty array on error to show "No rooms available" message
+      setRooms([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleJoinRoom = async () => {
-    if (roomCode.length === 6) {
-      try {
-        setIsLoading(true);
-        await apiClient.joinRoom(roomCode);
-        toast.success("Successfully joined the room!");
-        navigate(`/workspace/${roomCode}`);
-      } catch (error) {
-        console.error("Failed to join room:", error);
-        toast.error("Failed to join room. Please check the room code.");
-      } finally {
-        setIsLoading(false);
+    // Validate room code format (xxx-xxx-xxx)
+    const roomCodePattern = /^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/;
+    if (!roomCodePattern.test(roomCode)) {
+      setFormErrors({ roomCode: "Room code must be in format: abc-123-def" });
+      toast.error("Invalid room code format. Expected format: abc-123-def");
+      return;
+    }
+
+    try {
+      setIsJoining(true);
+      setFormErrors({});
+
+      await apiClient.joinRoom(roomCode);
+      toast.success("Successfully joined the room!");
+
+      // Navigate to workspace using room code
+      navigate(`/workspace/${roomCode}`);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+
+      if (error instanceof ApiRequestError) {
+        switch (error.statusCode) {
+          case 404:
+            setFormErrors({ roomCode: "Room not found with this code" });
+            toast.error("Room not found. Please check the room code.");
+            break;
+          case 409:
+            toast.info("You are already a member of this room!");
+            navigate(`/workspace/${roomCode}`);
+            break;
+          case 403:
+            toast.error(
+              "Access denied. You don't have permission to join this room."
+            );
+            break;
+          default:
+            toast.error(
+              error.message || "Failed to join room. Please try again."
+            );
+        }
+      } else {
+        toast.error("Failed to join room. Please try again.");
       }
+    } finally {
+      setIsJoining(false);
     }
   };
 
   const handleCreateRoom = async () => {
-    if (newRoomName.trim()) {
-      try {
-        setIsCreating(true);
-        const response = await apiClient.createRoom(newRoomName.trim());
-        toast.success(`Room "${newRoomName}" created successfully!`);
+    // Reset form errors
+    setFormErrors({});
 
-        // Navigate to the new room
-        if (response.room?.id) {
-          navigate(`/workspace/${response.room.id}`);
-        }
-      } catch (error) {
-        console.error("Failed to create room:", error);
-        toast.error("Failed to create room. Please try again.");
-      } finally {
-        setIsCreating(false);
+    // Validate inputs
+    const errors: typeof formErrors = {};
+    if (!newRoomName.trim()) {
+      errors.roomName = "Room name is required";
+    }
+    if (!newRoomDesc.trim()) {
+      errors.roomDesc = "Room description is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+
+      const response = await apiClient.createRoom(
+        newRoomName.trim(),
+        newRoomDesc.trim()
+      );
+
+      toast.success(`Room "${newRoomName}" created successfully!`);
+
+      // Clear form
+      setNewRoomName("");
+      setNewRoomDesc("");
+
+      // Refresh rooms list
+      fetchRooms();
+
+      // Navigate directly to the new room using room code
+      if (response.room?.room_code) {
+        navigate(`/workspace/${response.room.room_code}`);
+      } else if (response.room?.id) {
+        navigate(`/workspace/${response.room.id}`);
       }
+    } catch (error) {
+      console.error("Failed to create room:", error);
+
+      if (error instanceof ApiRequestError) {
+        switch (error.errorCode) {
+          case "Room name is required":
+            setFormErrors({ roomName: "Room name is required" });
+            toast.error("Room name is required");
+            break;
+          case "You already created a room with this name":
+            setFormErrors({
+              roomName: "You already have a room with this name",
+            });
+            toast.error(
+              "You already have a room with this name. Please choose a different name."
+            );
+            break;
+          case "Room with this name already exists":
+            setFormErrors({ roomName: "Room name already exists" });
+            toast.error(
+              "A room with this name already exists. Please choose a different name."
+            );
+            break;
+          case "User authentication required":
+            toast.error("Authentication required. Please log in again.");
+            break;
+          default:
+            toast.error(
+              error.message || "Failed to create room. Please try again."
+            );
+        }
+      } else {
+        toast.error("Failed to create room. Please try again.");
+      }
+    } finally {
+      setIsCreating(false);
     }
   };
 
-  const handleJoinExistingRoom = async (roomId: string) => {
+  const handleJoinExistingRoom = async (room: ExtendedRoom) => {
     try {
-      await apiClient.joinRoom(roomId);
+      // Prefer room_code for joining, then original_room_id, fallback to string id
+      const joinIdentifier =
+        room.room_code || room.original_room_id?.toString() || room.id;
+      await apiClient.joinRoom(joinIdentifier);
       toast.success("Successfully joined the room!");
-      navigate(`/workspace/${roomId}`);
+
+      // Navigate using room code if available, otherwise use room ID
+      if (room.room_code) {
+        navigate(`/workspace/${room.room_code}`);
+      } else {
+        navigate(`/workspace/${room.id}`);
+      }
     } catch (error) {
       console.error("Failed to join room:", error);
-      toast.error("Failed to join room. Please try again.");
+      console.error("Room data:", room);
+      console.error(
+        "Join identifier used:",
+        room.room_code || room.original_room_id?.toString() || room.id
+      );
+
+      if (error instanceof ApiRequestError) {
+        switch (error.statusCode) {
+          case 409:
+            toast.info("You are already a member of this room!");
+            if (room.room_code) {
+              navigate(`/workspace/${room.room_code}`);
+            } else {
+              navigate(`/workspace/${room.id}`);
+            }
+            break;
+          case 403:
+            toast.error(
+              "Access denied. You don't have permission to join this room."
+            );
+            break;
+          default:
+            toast.error(
+              error.message || "Failed to join room. Please try again."
+            );
+        }
+      } else {
+        toast.error("Failed to join room. Please try again.");
+      }
     }
   };
 
   return (
     <div className="space-y-8">
-      {/* Welcome Section */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl md:text-5xl font-bold text-white">
-          Welcome to Your Workspace
-        </h1>
-        <p className="text-white/70 text-lg max-w-2xl mx-auto">
-          Create a new room to start collaborating or join an existing room to
-          continue working with your team.
-        </p>
-      </div>
-
       {/* Main Action Container */}
       <Card className="bg-black/20 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-orange-400/10 max-w-2xl mx-auto">
         <CardContent className="p-8">
@@ -197,20 +365,33 @@ export function RoomManager() {
                     <Input
                       id="room-code"
                       type="text"
-                      placeholder="Enter 6-digit room code"
+                      placeholder="abc-123-def"
                       value={roomCode}
-                      onChange={(e) => setRoomCode(e.target.value)}
-                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all uppercase tracking-widest text-center text-lg font-mono"
-                      maxLength={1}
+                      onChange={(e) => {
+                        setRoomCode(e.target.value.toLowerCase());
+                        setFormErrors({ ...formErrors, roomCode: undefined });
+                      }}
+                      className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all lowercase tracking-widest text-center text-lg font-mono ${
+                        formErrors.roomCode
+                          ? "border-red-400 focus:border-red-400"
+                          : ""
+                      }`}
+                      maxLength={11}
+                      pattern="[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}"
                     />
+                    {formErrors.roomCode && (
+                      <p className="mt-1 text-xs text-red-400">
+                        {formErrors.roomCode}
+                      </p>
+                    )}
                   </div>
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={roomCode.length !== 6 || isLoading}
+                    disabled={!roomCode.trim() || isJoining}
                     onClick={handleJoinRoom}
                   >
-                    {isLoading ? "Joining..." : "Join Room"}
+                    {isJoining ? "Joining..." : "Join Room"}
                   </Button>
                 </div>
               </div>
@@ -255,9 +436,22 @@ export function RoomManager() {
                       type="text"
                       placeholder="My Awesome Project"
                       value={newRoomName}
-                      onChange={(e) => setNewRoomName(e.target.value)}
-                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                      onChange={(e) => {
+                        setNewRoomName(e.target.value);
+                        setFormErrors({ ...formErrors, roomName: undefined });
+                      }}
+                      className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all ${
+                        formErrors.roomName
+                          ? "border-red-400 focus:border-red-400"
+                          : ""
+                      }`}
+                      required
                     />
+                    {formErrors.roomName && (
+                      <p className="mt-1 text-xs text-red-400">
+                        {formErrors.roomName}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -265,19 +459,32 @@ export function RoomManager() {
                       htmlFor="room-desc"
                       className="text-white font-medium"
                     >
-                      Description (Optional)
+                      Description
                     </Label>
                     <Input
                       id="room-desc"
                       type="text"
                       placeholder="Brief description of your project"
                       value={newRoomDesc}
-                      onChange={(e) => setNewRoomDesc(e.target.value)}
-                      className="mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all"
+                      onChange={(e) => {
+                        setNewRoomDesc(e.target.value);
+                        setFormErrors({ ...formErrors, roomDesc: undefined });
+                      }}
+                      className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all ${
+                        formErrors.roomDesc
+                          ? "border-red-400 focus:border-red-400"
+                          : ""
+                      }`}
+                      required
                     />
+                    {formErrors.roomDesc && (
+                      <p className="mt-1 text-xs text-red-400">
+                        {formErrors.roomDesc}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex items-center space-x-3">
+                  {/* <div className="flex items-center space-x-3">
                     <input
                       type="checkbox"
                       id="private-room"
@@ -285,17 +492,14 @@ export function RoomManager() {
                       onChange={(e) => setIsPrivate(e.target.checked)}
                       className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
                     />
-                    <Label
-                      htmlFor="private-room"
-                      className="text-white/80 text-sm"
-                    >
-                      Make room private
+                    <Label htmlFor="private-room" className="text-white">
+                      Make this room private
                     </Label>
-                  </div>
+                  </div> */}
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={!newRoomName.trim() || isCreating}
+                    disabled={isCreating}
                     onClick={handleCreateRoom}
                   >
                     {isCreating ? "Creating..." : "Create Room"}
@@ -327,16 +531,32 @@ export function RoomManager() {
             </div>
 
             <div className="grid gap-4">
-              {rooms.length === 0 ? (
+              {isLoading ? (
                 <div className="text-center py-8 text-white/60">
-                  {isLoading ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-400"></div>
-                      <span>Loading rooms...</span>
-                    </div>
-                  ) : (
-                    <p>No rooms available. Create one to get started!</p>
-                  )}
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-400"></div>
+                    <span>Loading rooms...</span>
+                  </div>
+                </div>
+              ) : rooms.length === 0 ? (
+                <div className="text-center py-8 text-white/60">
+                  <div className="space-y-2">
+                    <svg
+                      className="w-12 h-12 text-white/30 mx-auto"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                    <p>No rooms available.</p>
+                    <p className="text-sm">Create a new room to get started!</p>
+                  </div>
                 </div>
               ) : (
                 rooms.map((room) => (
@@ -367,7 +587,11 @@ export function RoomManager() {
                           </h4>
                         </div>
                         <div className="flex items-center space-x-4 text-sm text-white/50">
-                          <span>Room ID: {room.id}</span>
+                          <span>
+                            {room.room_code
+                              ? `Code: ${room.room_code}`
+                              : `ID: ${room.id}`}
+                          </span>
                           <span>•</span>
                           <span>
                             Created{" "}
@@ -380,7 +604,7 @@ export function RoomManager() {
                     <Button
                       size="sm"
                       className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium shadow-lg hover:shadow-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
-                      onClick={() => handleJoinExistingRoom(room.id)}
+                      onClick={() => handleJoinExistingRoom(room)}
                     >
                       Join
                     </Button>

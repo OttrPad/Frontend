@@ -71,9 +71,7 @@ export function ProfileHeader({
   return (
     <header
       className={`relative z-20 p-6 md:p-8 ${
-        fixed
-          ? "fixed top-0 left-0 right-0 bg-black/20 backdrop-blur-md border-b border-white/10"
-          : ""
+        fixed ? "fixed top-0 left-0 right-0 bg-black/20 backdrop-blur-md" : ""
       } ${className}`}
     >
       <div className="flex items-center justify-between">
