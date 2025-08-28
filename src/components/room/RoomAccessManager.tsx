@@ -9,15 +9,17 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { Users, Plus, Trash2, Mail, Shield, Edit } from "lucide-react";
+import { Users, Plus, Trash2, Mail, UserCheck } from "lucide-react";
 import { apiClient } from "../../lib/apiClient";
 
-interface RoomUser {
-  id: number;
-  email: string;
-  access_level: "viewer" | "editor";
-  invited_by: string;
-  invited_at: string;
+interface Participant {
+  user_id?: string;
+  email?: string;
+  status: "member" | "invited";
+  user_type: "admin" | "editor" | "viewer";
+  joined_at?: string;
+  invited_at?: string;
+  invited_by?: string;
 }
 
 interface RoomAccessManagerProps {
@@ -31,7 +33,7 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
   isCreator,
   currentUserId,
 }) => {
-  const [users, setUsers] = useState<RoomUser[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -41,15 +43,15 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
 
-  const loadUsers = useCallback(async () => {
+  const loadParticipants = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getRoomAccess(roomId);
-      setUsers(response.allowed_emails || []);
+      const response = await apiClient.getRoomParticipants(roomId);
+      setParticipants(response.participants || []);
       setError(null);
     } catch (err) {
-      console.error("Failed to load room users:", err);
-      setError("Failed to load room users");
+      console.error("Failed to load room participants:", err);
+      setError("Failed to load room participants");
     } finally {
       setLoading(false);
     }
@@ -57,9 +59,9 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
 
   useEffect(() => {
     if (isCreator) {
-      loadUsers();
+      loadParticipants();
     }
-  }, [isCreator, loadUsers]);
+  }, [isCreator, loadParticipants]);
 
   const handleAddUser = useCallback(async () => {
     if (!newUserEmail.trim()) return;
@@ -72,7 +74,7 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
         newUserAccess,
         currentUserId
       );
-      await loadUsers();
+      await loadParticipants();
       setNewUserEmail("");
       setNewUserAccess("viewer");
       setShowAddUser(false);
@@ -83,74 +85,86 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
     } finally {
       setIsAddingUser(false);
     }
-  }, [roomId, newUserEmail, newUserAccess, currentUserId, loadUsers]);
-
-  const handleUpdateAccess = useCallback(
-    async (userEmail: string, newAccess: "viewer" | "editor") => {
-      try {
-        await apiClient.updateRoomAccess(
-          roomId,
-          userEmail,
-          newAccess,
-          currentUserId
-        );
-        await loadUsers();
-        setError(null);
-      } catch (err) {
-        console.error("Failed to update user access:", err);
-        setError("Failed to update user access");
-      }
-    },
-    [roomId, currentUserId, loadUsers]
-  );
+  }, [roomId, newUserEmail, newUserAccess, currentUserId, loadParticipants]);
 
   const handleRemoveUser = useCallback(
     async (userEmail: string) => {
       try {
         await apiClient.removeRoomAccess(roomId, userEmail);
-        await loadUsers();
+        await loadParticipants();
         setError(null);
       } catch (err) {
         console.error("Failed to remove user:", err);
         setError("Failed to remove user");
       }
     },
-    [roomId, loadUsers]
+    [roomId, loadParticipants]
   );
+
+  const getAccessLevelBadge = (userType: "admin" | "editor" | "viewer") => {
+    const baseClasses =
+      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+
+    switch (userType) {
+      case "admin":
+        return `${baseClasses} bg-orange-400/20 text-orange-400 border border-orange-400/30`;
+      case "editor":
+        return `${baseClasses} bg-blue-400/20 text-blue-400 border border-blue-400/30`;
+      case "viewer":
+        return `${baseClasses} bg-gray-400/20 text-gray-400 border border-gray-400/30`;
+      default:
+        return `${baseClasses} bg-gray-400/20 text-gray-400 border border-gray-400/30`;
+    }
+  };
+
+  const getStatusBadge = (status: "member" | "invited") => {
+    const baseClasses =
+      "inline-flex items-center px-2 py-1 rounded-md text-xs font-medium";
+
+    if (status === "member") {
+      return `${baseClasses} bg-green-400/20 text-green-400 border border-green-400/30`;
+    } else {
+      return `${baseClasses} bg-yellow-400/20 text-yellow-400 border border-yellow-400/30`;
+    }
+  };
 
   if (!isCreator) {
     return null;
   }
 
+  const members = participants.filter((p) => p.status === "member");
+  const invited = participants.filter((p) => p.status === "invited");
+
   return (
-    <Card>
+    <Card className="bg-black/20 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Room Access Management
+        <CardTitle className="flex items-center gap-2 text-white">
+          <Users className="h-5 w-5 text-orange-400" />
+          Room Participants
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-white/60">
           Manage who can access this room and their permission levels.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
+          <div className="bg-red-500/20 border border-red-500/30 text-red-400 px-3 py-2 rounded-md text-sm backdrop-blur-md">
             {error}
           </div>
         )}
 
         {/* Add User Section */}
-        <div className="border rounded-lg p-4 space-y-3">
+        <div className="border border-white/[0.08] rounded-xl p-4 space-y-3 bg-white/[0.02] backdrop-blur-md">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium">Add New User</h3>
+            <h3 className="font-medium text-white">Invite New User</h3>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowAddUser(!showAddUser)}
+              className="bg-white/[0.05] border-white/[0.1] text-white hover:bg-white/[0.08] hover:border-white/[0.15]"
             >
               <Plus className="h-4 w-4 mr-1" />
-              Add User
+              Invite User
             </Button>
           </div>
 
@@ -158,27 +172,39 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="userEmail">Email Address</Label>
+                  <Label htmlFor="userEmail" className="text-white font-medium">
+                    Email Address
+                  </Label>
                   <Input
                     id="userEmail"
                     type="email"
                     placeholder="user@example.com"
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="mt-1 bg-white/[0.05] border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08]"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="accessLevel">Access Level</Label>
+                  <Label
+                    htmlFor="accessLevel"
+                    className="text-white font-medium"
+                  >
+                    Access Level
+                  </Label>
                   <select
                     id="accessLevel"
                     value={newUserAccess}
                     onChange={(e) =>
                       setNewUserAccess(e.target.value as "viewer" | "editor")
                     }
-                    className="w-full p-2 border rounded-md"
+                    className="w-full mt-1 p-2 bg-white/[0.05] border border-white/[0.1] rounded-md text-white focus:border-orange-400/60 focus:bg-white/[0.08]"
                   >
-                    <option value="viewer">Viewer</option>
-                    <option value="editor">Editor</option>
+                    <option value="viewer" className="bg-black text-white">
+                      Viewer
+                    </option>
+                    <option value="editor" className="bg-black text-white">
+                      Editor
+                    </option>
                   </select>
                 </div>
               </div>
@@ -187,8 +213,9 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
                   onClick={handleAddUser}
                   disabled={isAddingUser || !newUserEmail.trim()}
                   size="sm"
+                  className="bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400"
                 >
-                  {isAddingUser ? "Adding..." : "Add User"}
+                  {isAddingUser ? "Inviting..." : "Send Invitation"}
                 </Button>
                 <Button
                   variant="outline"
@@ -198,6 +225,7 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
                     setNewUserAccess("viewer");
                   }}
                   size="sm"
+                  className="bg-white/[0.05] border-white/[0.1] text-white hover:bg-white/[0.08]"
                 >
                   Cancel
                 </Button>
@@ -206,74 +234,150 @@ const RoomAccessManager: React.FC<RoomAccessManagerProps> = ({
           )}
         </div>
 
-        {/* Users List */}
-        <div className="space-y-2">
-          <h3 className="font-medium">Current Users ({users.length})</h3>
-
-          {loading ? (
-            <div className="text-sm text-gray-500">Loading users...</div>
-          ) : users.length === 0 ? (
-            <div className="text-sm text-gray-500">
-              No users have access to this room yet.
+        {loading ? (
+          <div className="text-center py-8 text-white/60">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-400"></div>
+              <span>Loading participants...</span>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {users.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <div>
-                      <div className="font-medium text-sm">{user.email}</div>
-                      <div className="text-xs text-gray-500">
-                        Invited {new Date(user.invited_at).toLocaleDateString()}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Current Members */}
+            <div className="space-y-3">
+              <h3 className="font-medium text-white flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                Active Members ({members.length})
+              </h3>
+
+              {members.length === 0 ? (
+                <div className="text-sm text-white/50 py-4 text-center border border-white/[0.08] rounded-lg bg-white/[0.02]">
+                  No active members yet.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {members.map((participant, index) => (
+                    <div
+                      key={`member-${participant.user_id || index}`}
+                      className="flex items-center justify-between p-3 border border-white/[0.08] rounded-lg bg-white/[0.02] backdrop-blur-md hover:bg-white/[0.04] transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-green-400/20 rounded-full flex items-center justify-center border border-green-400/30">
+                          <UserCheck className="h-4 w-4 text-green-400" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-white">
+                            {participant.email || `User ${participant.user_id}`}
+                          </div>
+                          <div className="text-xs text-white/50">
+                            {participant.joined_at
+                              ? `Joined ${new Date(
+                                  participant.joined_at
+                                ).toLocaleDateString()}`
+                              : "Active member"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={getStatusBadge(participant.status)}>
+                          Member
+                        </span>
+                        <span
+                          className={getAccessLevelBadge(participant.user_type)}
+                        >
+                          {participant.user_type.charAt(0).toUpperCase() +
+                            participant.user_type.slice(1)}
+                        </span>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={user.access_level}
-                      onChange={(e) =>
-                        handleUpdateAccess(
-                          user.email,
-                          e.target.value as "viewer" | "editor"
-                        )
-                      }
-                      className="text-sm border rounded px-2 py-1"
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
-                    </select>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRemoveUser(user.email)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+
+            {/* Invited Users */}
+            <div className="space-y-3">
+              <h3 className="font-medium text-white flex items-center gap-2">
+                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                Pending Invitations ({invited.length})
+              </h3>
+
+              {invited.length === 0 ? (
+                <div className="text-sm text-white/50 py-4 text-center border border-white/[0.08] rounded-lg bg-white/[0.02]">
+                  No pending invitations.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {invited.map((participant, index) => (
+                    <div
+                      key={`invited-${participant.email || index}`}
+                      className="flex items-center justify-between p-3 border border-white/[0.08] rounded-lg bg-white/[0.02] backdrop-blur-md hover:bg-white/[0.04] transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-yellow-400/20 rounded-full flex items-center justify-center border border-yellow-400/30">
+                          <Mail className="h-4 w-4 text-yellow-400" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-white">
+                            {participant.email}
+                          </div>
+                          <div className="text-xs text-white/50">
+                            {participant.invited_at
+                              ? `Invited ${new Date(
+                                  participant.invited_at
+                                ).toLocaleDateString()}`
+                              : "Pending invitation"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={getStatusBadge(participant.status)}>
+                          Invited
+                        </span>
+                        <span
+                          className={getAccessLevelBadge(participant.user_type)}
+                        >
+                          {participant.user_type.charAt(0).toUpperCase() +
+                            participant.user_type.slice(1)}
+                        </span>
+
+                        {/* Only show remove button for invited users */}
+                        {participant.email && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRemoveUser(participant.email!)}
+                            className="text-red-400 hover:text-red-300 border-red-400/30 hover:border-red-400/50 bg-red-400/10 hover:bg-red-400/20"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Permission Levels Info */}
-        <div className="bg-gray-50 border rounded-lg p-3 text-sm">
-          <div className="font-medium mb-2">Permission Levels:</div>
-          <div className="space-y-1 text-gray-600">
-            <div className="flex items-center gap-2">
-              <Shield className="h-3 w-3" />
-              <strong>Viewer:</strong> Can view code and run blocks (read-only)
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-lg p-4 text-sm backdrop-blur-md">
+          <div className="font-medium mb-3 text-white">Permission Levels:</div>
+          <div className="space-y-2 text-white/70">
+            <div className="flex items-center gap-3">
+              <span className={getAccessLevelBadge("admin")}>Admin</span>
+              <span>Full room control including user management</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Edit className="h-3 w-3" />
-              <strong>Editor:</strong> Can view, edit, and run code blocks
+            <div className="flex items-center gap-3">
+              <span className={getAccessLevelBadge("editor")}>Editor</span>
+              <span>Can view, edit, and run code blocks</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={getAccessLevelBadge("viewer")}>Viewer</span>
+              <span>Can view code and run blocks (read-only)</span>
             </div>
           </div>
         </div>
