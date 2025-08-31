@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
+import { socket, connectSocketWithToken } from "../lib/socket";
+import supabase from "../lib/supabaseClient";
+
 import type {
   Block,
   FileNode,
@@ -10,7 +13,9 @@ import type {
   RunOutput,
   AIMessage,
   Lang,
+  ChatMessage,
 } from "../types/workspace";
+
 
 // Files Store
 interface FilesState {
@@ -90,13 +95,20 @@ interface AIState {
   sendMessage: (content: string) => void;
 }
 
+// Chat Store
+interface ChatState {
+  messages: Record<string, ChatMessage[]>; // keyed by room_id (stringified)
+  sendChat: (roomId: string | number, uid: string, message: string) => void;
+  clearChat: (roomId: string | number) => void;
+}
+
 // App Store (general settings)
 interface AppState {
   theme: "light" | "dark";
   currentRoom: string | null;
   sidebarWidth: number;
   rightPanelWidth: number;
-  activeActivity: "files" | "users" | "tests" | "versions" | "ai";
+  activeActivity: "files" | "users" | "tests" | "versions" | "ai" | "chat";
   isLeftSidebarCollapsed: boolean;
   isRightSidebarCollapsed: boolean;
   toggleTheme: () => void;
@@ -104,7 +116,7 @@ interface AppState {
   setSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
   setActiveActivity: (
-    activity: "files" | "users" | "tests" | "versions" | "ai"
+    activity: "files" | "users" | "tests" | "versions" | "ai" | "chat"
   ) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
@@ -603,6 +615,82 @@ export const useAIStore = create<AIState>()(
   )
 );
 
+// export const useChatStore = create<ChatState>()(
+//   devtools(
+//     (set, get) => ({
+//       messages: {},
+
+//       sendChat: (roomId, senderId, senderName, content) => {
+//         const newMsg: ChatMessage = {
+//           id: uuidv4(),
+//           roomId,
+//           senderId,
+//           senderName,
+//           content,
+//           timestamp: Date.now(),
+//         };
+
+//         const current = get().messages[roomId] ?? [];
+//         set({ messages: { ...get().messages, [roomId]: [...current, newMsg] } });
+//       },
+
+//       clearChat: (roomId) => {
+//         const next = { ...get().messages };
+//         next[roomId] = [];
+//         set({ messages: next });
+//       },
+//     }),
+//     { name: "chat-store" }
+//   )
+// );
+
+
+socket.on("connect", () => {
+  console.log("Connected to socket.io server");
+});
+
+  socket.on('message', (message: unknown) => {
+  console.log(message);
+  })
+
+export const useChatStore = create<ChatState>()(
+  devtools(
+    (set, get) => ({
+      messages: {},
+
+      sendChat: (roomId, uid, message) => {
+        if (roomId === null || roomId === undefined || !String(message).trim()) {
+          return;
+        }
+        // Emit using backend-expected keys
+        socket.emit("chat:send", {
+          roomId,
+          uid,
+          message,
+        });
+        // Optimistic append
+        const key = String(roomId);
+        const newMsg: ChatMessage = {
+          room_id: roomId,
+          uid,
+          message,
+          created_at: Date.now(),
+        };
+        const current = get().messages[key] ?? [];
+        set({ messages: { ...get().messages, [key]: [...current, newMsg] } });
+        console.log("Message sent:", { roomId, uid, message });
+      },
+
+      clearChat: (roomId) => {
+        const next = { ...get().messages } as Record<string, ChatMessage[]>;
+        next[String(roomId)] = [];
+        set({ messages: next });
+      },
+    }),
+    { name: "chat-store" }
+  )
+);
+
 export const useAppStore = create<AppState>()(
   devtools(
     (set) => ({
@@ -620,6 +708,22 @@ export const useAppStore = create<AppState>()(
 
       setCurrentRoom: (roomId) => {
         set({ currentRoom: roomId });
+        // Ensure socket is connected with JWT, then join the room for backend logging
+        (async () => {
+          try {
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
+            if (token) {
+              await connectSocketWithToken(token);
+            }
+            if (socket.connected && roomId) {
+              socket.emit("joinRoom", { roomId });
+            }
+          } catch (e) {
+            // non-blocking
+            console.warn("Socket joinRoom skipped:", e);
+          }
+        })();
       },
 
       setSidebarWidth: (width) => {

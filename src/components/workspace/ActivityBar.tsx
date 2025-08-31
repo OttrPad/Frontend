@@ -1,9 +1,9 @@
 import React from "react";
 import { useAppStore } from "../../store/workspace";
-import { Users, TestTube, GitBranch, Bot, Files, Terminal } from "lucide-react";
+import { Users, TestTube, GitBranch, Bot, Files, Terminal, MessageSquare } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-type ActivityType = "files" | "users" | "tests" | "versions" | "ai";
+type ActivityType = "files" | "users" | "tests" | "versions" | "ai" | "chat";
 
 interface ActivityItem {
   id: ActivityType;
@@ -42,6 +42,12 @@ const activities: ActivityItem[] = [
     icon: Bot,
     label: "AI",
     tooltip: "AI Assistant",
+  },
+  {
+    id: "chat",
+    icon: MessageSquare,
+    label: "Chat",
+    tooltip: "Room Chat",
   },
 ];
 
