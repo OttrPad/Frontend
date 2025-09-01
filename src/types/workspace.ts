@@ -93,6 +93,7 @@ export interface ChatMessage {
   message_id?: number; // optional locally until persisted
   room_id: number | string;
   uid: string; // user id (uuid)
+  email?: string; // optional email for display
   message: string;
   created_at: string | number; // ISO string or epoch ms
 }

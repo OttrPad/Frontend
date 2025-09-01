@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
-import { socket, connectSocketWithToken } from "../lib/socket";
-import supabase from "../lib/supabaseClient";
+import { socket} from "../lib/socket";
+
 
 import type {
   Block,
@@ -98,7 +98,7 @@ interface AIState {
 // Chat Store
 interface ChatState {
   messages: Record<string, ChatMessage[]>; // keyed by room_id (stringified)
-  sendChat: (roomId: string | number, uid: string, message: string) => void;
+  sendChat: (roomId: string | number, uid: string, message: string, email?: string) => void;
   clearChat: (roomId: string | number) => void;
 }
 
@@ -660,6 +660,7 @@ function outputMessage(message: unknown) {
   // Normalize payload
   let roomId: string | number | undefined;
   let uid: string = "system";
+  let email: string | undefined;
   let text: string | undefined;
   let created: string | number = Date.now();
 
@@ -671,6 +672,7 @@ function outputMessage(message: unknown) {
       roomId?: string | number;
       uid?: string;
       userId?: string;
+      email?: string;
       message?: string;
       content?: string;
       text?: string;
@@ -679,6 +681,7 @@ function outputMessage(message: unknown) {
     };
     roomId = m.room_id ?? m.roomId;
     uid = m.uid ?? m.userId ?? uid;
+    email = m.email;
     text = m.message ?? m.content ?? m.text;
     created = m.created_at ?? m.createdAt ?? created;
   }
@@ -695,6 +698,7 @@ function outputMessage(message: unknown) {
   const entry: ChatMessage = {
     room_id: roomId,
     uid,
+  email,
     message: text,
     created_at: created,
   };
@@ -709,7 +713,7 @@ export const useChatStore = create<ChatState>()(
     (set, get) => ({
       messages: {},
 
-      sendChat: (roomId, uid, message) => {
+    sendChat: (roomId, uid, message, email) => {
         if (roomId === null || roomId === undefined || !String(message).trim()) {
           return;
         }
@@ -718,12 +722,14 @@ export const useChatStore = create<ChatState>()(
           roomId,
           uid,
           message,
+      email,
         });
         // Optimistic append
         const key = String(roomId);
         const newMsg: ChatMessage = {
           room_id: roomId,
           uid,
+      email,
           message,
           created_at: Date.now(),
         };
@@ -737,10 +743,80 @@ export const useChatStore = create<ChatState>()(
         next[String(roomId)] = [];
         set({ messages: next });
       },
+
+      
+
+
     }),
     { name: "chat-store" }
+    
   )
+  
 );
+
+// export const useAppStore = create<AppState>()(
+//   devtools(
+//     (set) => ({
+//       theme: "dark",
+//       currentRoom: null,
+//       sidebarWidth: 280,
+//       rightPanelWidth: 350,
+//       activeActivity: "files",
+//       isLeftSidebarCollapsed: false,
+//       isRightSidebarCollapsed: false,
+
+//       toggleTheme: () => {
+//         set((state) => ({ theme: state.theme === "light" ? "dark" : "light" }));
+//       },
+
+//       setCurrentRoom: (roomId) => {
+//         set({ currentRoom: roomId });
+//         // Ensure socket is connected with JWT, then join the room for backend logging
+//         (async () => {
+//           try {
+//             const { data } = await supabase.auth.getSession();
+//             const token = data.session?.access_token;
+//             if (token) {
+//               await connectSocketWithToken(token);
+//             }
+//             if (socket.connected && roomId) {
+//               socket.emit("joinRoom", { roomId });
+//             }
+//           } catch (e) {
+//             // non-blocking
+//             console.warn("Socket joinRoom skipped:", e);
+//           }
+//         })();
+//       },
+
+//       setSidebarWidth: (width) => {
+//         set({ sidebarWidth: Math.max(200, Math.min(500, width)) });
+//       },
+
+//       setRightPanelWidth: (width) => {
+//         set({ rightPanelWidth: Math.max(300, Math.min(600, width)) });
+//       },
+
+//       setActiveActivity: (activity) => {
+//         set({ activeActivity: activity });
+//       },
+
+//       toggleLeftSidebar: () => {
+//         set((state) => ({
+//           isLeftSidebarCollapsed: !state.isLeftSidebarCollapsed,
+//         }));
+//       },
+
+//       toggleRightSidebar: () => {
+//         set((state) => ({
+//           isRightSidebarCollapsed: !state.isRightSidebarCollapsed,
+//         }));
+//       },
+//     }),
+//     { name: "app-store" }
+//   )
+// );
+
 
 export const useAppStore = create<AppState>()(
   devtools(
@@ -759,22 +835,6 @@ export const useAppStore = create<AppState>()(
 
       setCurrentRoom: (roomId) => {
         set({ currentRoom: roomId });
-        // Ensure socket is connected with JWT, then join the room for backend logging
-        (async () => {
-          try {
-            const { data } = await supabase.auth.getSession();
-            const token = data.session?.access_token;
-            if (token) {
-              await connectSocketWithToken(token);
-            }
-            if (socket.connected && roomId) {
-              socket.emit("joinRoom", { roomId });
-            }
-          } catch (e) {
-            // non-blocking
-            console.warn("Socket joinRoom skipped:", e);
-          }
-        })();
       },
 
       setSidebarWidth: (width) => {
