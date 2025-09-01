@@ -1,8 +1,9 @@
 import supabase from "./supabaseClient";
 
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-// Reuse the shared Supabase client (avoids multiple GoTrueClient instances)
+
 
 // Types for API responses
 export interface Room {
@@ -290,17 +291,20 @@ class ApiClient {
     });
   }
 
-  // Participants methods
+  // Participants methods - Get all participants and invited users in a room
   async getRoomParticipants(roomIdentifier: string): Promise<{
     message: string;
-    roomId: string;
+    room: { id: string; name: string };
     participants: Array<{
-      userId: string;
-      userEmail: string;
-      socketId: string;
-      joinedAt: number;
+      user_id?: string;
+      email?: string;
+      status: "member" | "invited";
+      user_type: "admin" | "editor" | "viewer";
+      joined_at?: string;
+      invited_at?: string;
+      invited_by?: string;
     }>;
-    totalCount: number;
+    total_count: number;
   }> {
     // First try to resolve the room identifier to get the numeric room ID
     const roomId = await this.resolveRoomIdentifier(roomIdentifier);
