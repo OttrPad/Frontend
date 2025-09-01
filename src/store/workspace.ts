@@ -649,9 +649,60 @@ socket.on("connect", () => {
   console.log("Connected to socket.io server");
 });
 
-  socket.on('message', (message: unknown) => {
+
+// Message from server
+socket.on('message', (message: unknown) => {
   console.log(message);
-  })
+  outputMessage(message);
+});
+
+function outputMessage(message: unknown) {
+  // Normalize payload
+  let roomId: string | number | undefined;
+  let uid: string = "system";
+  let text: string | undefined;
+  let created: string | number = Date.now();
+
+  if (typeof message === "string") {
+    text = message;
+  } else if (message && typeof message === "object") {
+    const m = message as {
+      room_id?: string | number;
+      roomId?: string | number;
+      uid?: string;
+      userId?: string;
+      message?: string;
+      content?: string;
+      text?: string;
+      created_at?: string | number;
+      createdAt?: string | number;
+    };
+    roomId = m.room_id ?? m.roomId;
+    uid = m.uid ?? m.userId ?? uid;
+    text = m.message ?? m.content ?? m.text;
+    created = m.created_at ?? m.createdAt ?? created;
+  }
+
+  // Fallback to current room if not provided
+  if (roomId == null) {
+    const current = useAppStore.getState().currentRoom ?? "global";
+    roomId = current;
+  }
+
+  if (!text) return; // nothing to show
+
+  const key = String(roomId);
+  const entry: ChatMessage = {
+    room_id: roomId,
+    uid,
+    message: text,
+    created_at: created,
+  };
+
+  const s = useChatStore.getState();
+  const current = s.messages[key] ?? [];
+  useChatStore.setState({ messages: { ...s.messages, [key]: [...current, entry] } });
+}
 
 export const useChatStore = create<ChatState>()(
   devtools(
