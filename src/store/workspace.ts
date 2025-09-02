@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import { socket} from "../lib/socket";
 
@@ -615,34 +615,7 @@ export const useAIStore = create<AIState>()(
   )
 );
 
-// export const useChatStore = create<ChatState>()(
-//   devtools(
-//     (set, get) => ({
-//       messages: {},
 
-//       sendChat: (roomId, senderId, senderName, content) => {
-//         const newMsg: ChatMessage = {
-//           id: uuidv4(),
-//           roomId,
-//           senderId,
-//           senderName,
-//           content,
-//           timestamp: Date.now(),
-//         };
-
-//         const current = get().messages[roomId] ?? [];
-//         set({ messages: { ...get().messages, [roomId]: [...current, newMsg] } });
-//       },
-
-//       clearChat: (roomId) => {
-//         const next = { ...get().messages };
-//         next[roomId] = [];
-//         set({ messages: next });
-//       },
-//     }),
-//     { name: "chat-store" }
-//   )
-// );
 
 
 socket.on("connect", () => {
@@ -710,112 +683,51 @@ function outputMessage(message: unknown) {
 
 export const useChatStore = create<ChatState>()(
   devtools(
-    (set, get) => ({
-      messages: {},
+    persist(
+      (set, get) => ({
+        messages: {},
 
-    sendChat: (roomId, uid, message, email) => {
-        if (roomId === null || roomId === undefined || !String(message).trim()) {
-          return;
-        }
-        // Emit using backend-expected keys
-        socket.emit("chat:send", {
-          roomId,
-          uid,
-          message,
-      email,
-        });
-        // Optimistic append
-        const key = String(roomId);
-        const newMsg: ChatMessage = {
-          room_id: roomId,
-          uid,
-      email,
-          message,
-          created_at: Date.now(),
-        };
-        const current = get().messages[key] ?? [];
-        set({ messages: { ...get().messages, [key]: [...current, newMsg] } });
-        console.log("Message sent:", { roomId, uid, message });
-      },
+        sendChat: (roomId, uid, message, email) => {
+          if (roomId === null || roomId === undefined || !String(message).trim()) {
+            return;
+          }
+          // Emit using backend-expected keys
+          socket.emit("chat:send", {
+            roomId,
+            uid,
+            message,
+            email,
+          });
+          // Optimistic append
+          const key = String(roomId);
+          const newMsg: ChatMessage = {
+            room_id: roomId,
+            uid,
+            email,
+            message,
+            created_at: Date.now(),
+          };
+          const current = get().messages[key] ?? [];
+          set({ messages: { ...get().messages, [key]: [...current, newMsg] } });
+          console.log("Message sent:", { roomId, uid, message });
+        },
 
-      clearChat: (roomId) => {
-        const next = { ...get().messages } as Record<string, ChatMessage[]>;
-        next[String(roomId)] = [];
-        set({ messages: next });
-      },
-
-      
-
-
-    }),
-    { name: "chat-store" }
-    
+        clearChat: (roomId) => {
+          const next = { ...get().messages } as Record<string, ChatMessage[]>;
+          next[String(roomId)] = [];
+          set({ messages: next });
+        },
+      }),
+      {
+        name: "chat-history", // localStorage key
+        version: 1,
+        storage: createJSONStorage(() => localStorage),
+        partialize: (state) => ({ messages: state.messages }),
+      }
+    ),
+    { name: "chat-store-devtools" }
   )
-  
 );
-
-// export const useAppStore = create<AppState>()(
-//   devtools(
-//     (set) => ({
-//       theme: "dark",
-//       currentRoom: null,
-//       sidebarWidth: 280,
-//       rightPanelWidth: 350,
-//       activeActivity: "files",
-//       isLeftSidebarCollapsed: false,
-//       isRightSidebarCollapsed: false,
-
-//       toggleTheme: () => {
-//         set((state) => ({ theme: state.theme === "light" ? "dark" : "light" }));
-//       },
-
-//       setCurrentRoom: (roomId) => {
-//         set({ currentRoom: roomId });
-//         // Ensure socket is connected with JWT, then join the room for backend logging
-//         (async () => {
-//           try {
-//             const { data } = await supabase.auth.getSession();
-//             const token = data.session?.access_token;
-//             if (token) {
-//               await connectSocketWithToken(token);
-//             }
-//             if (socket.connected && roomId) {
-//               socket.emit("joinRoom", { roomId });
-//             }
-//           } catch (e) {
-//             // non-blocking
-//             console.warn("Socket joinRoom skipped:", e);
-//           }
-//         })();
-//       },
-
-//       setSidebarWidth: (width) => {
-//         set({ sidebarWidth: Math.max(200, Math.min(500, width)) });
-//       },
-
-//       setRightPanelWidth: (width) => {
-//         set({ rightPanelWidth: Math.max(300, Math.min(600, width)) });
-//       },
-
-//       setActiveActivity: (activity) => {
-//         set({ activeActivity: activity });
-//       },
-
-//       toggleLeftSidebar: () => {
-//         set((state) => ({
-//           isLeftSidebarCollapsed: !state.isLeftSidebarCollapsed,
-//         }));
-//       },
-
-//       toggleRightSidebar: () => {
-//         set((state) => ({
-//           isRightSidebarCollapsed: !state.isRightSidebarCollapsed,
-//         }));
-//       },
-//     }),
-//     { name: "app-store" }
-//   )
-// );
 
 
 export const useAppStore = create<AppState>()(
