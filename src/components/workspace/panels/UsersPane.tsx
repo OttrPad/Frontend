@@ -11,7 +11,7 @@ import {
 } from "../../ui/card";
 import { Users, Plus, Trash2, Shield, Edit, Crown, User } from "lucide-react";
 import { apiClient } from "../../../lib/apiClient";
-import { useAuth } from "../../../hooks/useAuth";
+import { useUser } from "../../../hooks/useUser";
 
 interface Participant {
   user_id: string;
@@ -28,7 +28,7 @@ interface UsersPaneProps {
 }
 
 export function UsersPane({ roomId }: UsersPaneProps) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, userProfile } = useUser();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,14 +50,57 @@ export function UsersPane({ roomId }: UsersPaneProps) {
   // Cache timeout (5 minutes)
   const CACHE_TIMEOUT = 5 * 60 * 1000;
 
-  // Generate user initials - prefer email, fallback to user ID
-  const getInitials = (email: string, userId?: string) => {
+  // Generate user display name - prefer full name, then email username, then fallback
+  const getDisplayName = (participant: Participant, isCurrentUser: boolean) => {
+    // If it's the current user and we have their profile name, use it
+    if (isCurrentUser && userProfile?.name) {
+      return userProfile.name;
+    }
+
+    // Extract name from email if available
+    if (participant.email && participant.email.includes("@")) {
+      const emailParts = participant.email.split("@");
+      const username = emailParts[0];
+
+      // Handle empty username (shouldn't happen but just in case)
+      if (!username) {
+        return participant.status === "invited" ? "Invited User" : "User";
+      }
+
+      // Convert common email patterns to readable names
+      // e.g., "john.doe" -> "John Doe", "john_doe" -> "John Doe"
+      const readableName = username
+        .split(/[._-]/)
+        .map(
+          (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+        )
+        .join(" ");
+
+      return readableName;
+    }
+
+    // Fallback for different user types
+    if (participant.status === "invited") {
+      return "Invited User";
+    }
+
+    // Fallback - show user ID if available
+    if (participant.user_id && participant.user_id.length > 6) {
+      return `User ${participant.user_id.slice(-6)}`; // Show last 6 chars of user ID
+    }
+
+    return "Anonymous User";
+  }; // Generate user initials - prefer email, fallback to user ID or status
+  const getInitials = (email: string, userId?: string, status?: string) => {
     if (email && email.includes("@")) {
       // Get first letter of email username
-      return email.charAt(0).toUpperCase();
-    } else if (userId) {
+      const username = email.split("@")[0];
+      return username.charAt(0).toUpperCase();
+    } else if (userId && userId.length > 0) {
       // Get first letter of user ID as fallback
       return userId.charAt(0).toUpperCase();
+    } else if (status === "invited") {
+      return "I"; // For invited users
     }
     return "U"; // Ultimate fallback
   };
@@ -120,86 +163,101 @@ export function UsersPane({ roomId }: UsersPaneProps) {
         }
       }
 
-      // Get active participants
+      // Get all participants (members + invited users) - New unified API
       const participantsResponse = await apiClient.getRoomParticipants(roomId);
-
-      // Get invited users (allowed_emails) if user is admin
-      let invitedUsers: Array<{
-        id: number;
-        email: string;
-        access_level: "viewer" | "editor";
-        invited_by: string;
-        invited_at: string;
-      }> = [];
       const isRoomCreator = currentRoomInfo?.created_by === currentUser?.id;
 
-      if (isRoomCreator) {
-        try {
-          const accessResponse = await apiClient.getRoomAccess(roomId);
-          invitedUsers = accessResponse.allowed_emails || [];
-        } catch (err) {
-          console.log(
-            "Could not fetch invited users (might not be admin):",
-            err
-          );
-        }
-      }
-
-      // Combine participants and invited users
+      // Process all participants from the unified API response
       const allUsers: Participant[] = [];
 
-      // Add active participants (members)
+      // The new API returns both members and invited users in a single array
       (participantsResponse.participants || []).forEach(
         (p: {
+          // Old format (legacy support)
           userId?: string;
-          user_id?: string;
           userEmail?: string;
-          email?: string;
+          socketId?: string;
           joinedAt?: number;
+          // New format (expected)
+          user_id?: string | null;
+          email?: string;
+          status?: "member" | "invited";
+          user_type?: "admin" | "editor" | "viewer";
           joined_at?: string;
+          invited_at?: string;
+          invited_by?: string;
         }) => {
-          const userId = p.userId || p.user_id || "";
-          const userEmail = p.userEmail || p.email || "";
+          // Handle both old and new API response formats
+          const userId = p.user_id || p.userId || "";
+          const userEmail = p.email || p.userEmail || "";
 
-          // Determine user type based on whether they're the creator
-          let userType: "admin" | "editor" | "viewer" = "editor"; // Default
+          // Skip if we don't have valid email data
+          if (!userEmail) {
+            console.warn("Participant missing email:", p);
+            return;
+          }
+
+          // Use the user_type from API response, with fallbacks
+          let userType: "admin" | "editor" | "viewer" = p.user_type || "editor";
+
+          // Ensure room creator is always admin (backup check)
           if (userId === currentRoomInfo?.created_by) {
-            userType = "admin"; // Room creator is admin
+            userType = "admin";
+          }
+
+          // Handle date formats (old uses timestamp, new uses ISO string)
+          let joinedAt: string | undefined;
+          if (p.joined_at) {
+            joinedAt = p.joined_at;
+          } else if (p.joinedAt) {
+            joinedAt = new Date(p.joinedAt).toISOString();
+          }
+
+          // For current user, use profile data if available
+          let finalEmail = userEmail;
+          if (userId === currentUser?.id && userProfile?.email) {
+            finalEmail = userProfile.email;
           }
 
           allUsers.push({
             user_id: userId,
-            email: userEmail,
-            status: "member",
+            email: finalEmail,
+            status: p.status || "member",
             user_type: userType,
-            joined_at: p.joinedAt
-              ? new Date(p.joinedAt).toISOString()
-              : p.joined_at,
-            invited_at: undefined,
-            invited_by: undefined,
+            joined_at: joinedAt,
+            invited_at: p.invited_at,
+            invited_by: p.invited_by,
           });
         }
       );
 
-      // Add invited users (not yet members)
-      invitedUsers.forEach((invitedUser) => {
-        // Check if this email is already a member
-        const isAlreadyMember = allUsers.some(
-          (u) => u.email === invitedUser.email
+      // Backup: Only add current user if not already in the list (shouldn't happen with proper API)
+      if (currentUser && userProfile) {
+        const currentUserExists = allUsers.some(
+          (u) =>
+            (u.user_id && u.user_id === currentUser.id) ||
+            u.email === userProfile.email
         );
 
-        if (!isAlreadyMember) {
+        if (!currentUserExists) {
+          console.log(
+            "Current user not found in participants, adding manually"
+          );
+          // Determine if current user is admin/creator
+          const isCurrentUserAdmin =
+            currentRoomInfo?.created_by === currentUser.id;
+
           allUsers.push({
-            user_id: "", // No user ID for invited users
-            email: invitedUser.email,
-            status: "invited",
-            user_type: invitedUser.access_level,
-            joined_at: undefined,
-            invited_at: invitedUser.invited_at,
-            invited_by: invitedUser.invited_by,
+            user_id: currentUser.id,
+            email: userProfile.email,
+            status: "member",
+            user_type: isCurrentUserAdmin ? "admin" : "editor",
+            joined_at: new Date().toISOString(),
+            invited_at: undefined,
+            invited_by: undefined,
           });
         }
-      });
+      }
 
       setParticipants(allUsers);
       setIsAdmin(isRoomCreator);
@@ -207,7 +265,19 @@ export function UsersPane({ roomId }: UsersPaneProps) {
     } catch (err) {
       console.error("Failed to load room participants:", err);
       if (err instanceof Error) {
-        setError(err.message || "Failed to load room participants");
+        // More specific error messages based on the updated API
+        if (
+          err.message.includes("403") ||
+          err.message.includes("Access denied")
+        ) {
+          setError(
+            "Access denied: You must be a room member to view participants"
+          );
+        } else if (err.message.includes("404")) {
+          setError("Room not found");
+        } else {
+          setError(err.message || "Failed to load room participants");
+        }
       } else {
         setError("Failed to load room participants");
       }
@@ -216,7 +286,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
     } finally {
       setLoading(false);
     }
-  }, [roomId, currentUser?.id, roomInfo, CACHE_TIMEOUT]);
+  }, [roomId, currentUser, userProfile, roomInfo, CACHE_TIMEOUT]);
 
   useEffect(() => {
     if (roomId && currentUser) {
@@ -317,6 +387,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
           <Users className="h-5 w-5 text-orange-400" />
           <h2 className="text-lg font-semibold text-white">Room Users</h2>
         </div>
+        {/* Add User button - Only admins can add users */}
         {isAdmin && (
           <Button
             variant="outline"
@@ -405,12 +476,20 @@ export function UsersPane({ roomId }: UsersPaneProps) {
 
       {/* Users List */}
       <div className="flex-1 overflow-y-auto space-y-3">
-        <div className="text-sm text-gray-400">
-          {loading
-            ? "Loading users..."
-            : `${participants.length} participant${
-                participants.length !== 1 ? "s" : ""
-              }`}
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-400">
+            {loading
+              ? "Loading users..."
+              : `${participants.length} participant${
+                  participants.length !== 1 ? "s" : ""
+                }`}
+          </span>
+          {/* Info for non-admin users */}
+          {!isAdmin && !loading && participants.length > 0 && (
+            <span className="text-xs text-gray-500">
+              View only • Admin can edit
+            </span>
+          )}
         </div>
 
         {loading ? (
@@ -454,14 +533,21 @@ export function UsersPane({ roomId }: UsersPaneProps) {
                     ),
                   }}
                 >
-                  {getInitials(participant.email || "", participant.user_id)}
+                  {getInitials(
+                    participant.email || "",
+                    participant.user_id,
+                    participant.status
+                  )}
                 </div>
 
                 {/* User Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <div className="text-sm font-medium text-white truncate">
-                      {participant.email?.split("@")[0] || "User"}
+                      {getDisplayName(
+                        participant,
+                        participant.user_id === currentUser?.id
+                      )}
                       {participant.user_id === currentUser?.id && (
                         <span className="text-orange-400 ml-1">(You)</span>
                       )}
@@ -486,7 +572,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
                       {participant.status}
                     </span>
                   </div>
-                  {/* Always show email */}
+                  {/* Always show email for all users */}
                   <div className="text-xs text-gray-400 truncate mt-1">
                     {participant.email || "No email available"}
                   </div>
@@ -534,7 +620,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
         <div className="space-y-1 text-gray-400">
           <div className="flex items-center gap-2">
             <Crown className="h-3 w-3 text-yellow-500" />
-            <strong>Admin:</strong> Full control over room and users
+            <strong>Admin:</strong> Full control over room and user management
           </div>
           <div className="flex items-center gap-2">
             <Edit className="h-3 w-3 text-blue-500" />
@@ -544,6 +630,9 @@ export function UsersPane({ roomId }: UsersPaneProps) {
             <Shield className="h-3 w-3 text-gray-500" />
             <strong>Viewer:</strong> Can view code and run blocks (read-only)
           </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-border/50 text-gray-500">
+          All room members can view the participant list
         </div>
       </div>
     </div>
