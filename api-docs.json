@@ -99,6 +99,18 @@
       "description": "Room management operations"
     },
     {
+      "name": "Room Access",
+      "description": "Room access control and invitations"
+    },
+    {
+      "name": "Room Access Management",
+      "description": "Room participant and invitation management"
+    },
+    {
+      "name": "User Profile",
+      "description": "User profile and authentication information"
+    },
+    {
       "name": "AI Engine",
       "description": "AI-powered code assistance (Coming Soon)"
     },
@@ -1255,7 +1267,7 @@
     "/api/rooms/{id}/participants": {
       "get": {
         "summary": "Get all participants and invited users in a room",
-        "description": "Retrieve list of all users associated with the room including:\n- Current members (users who have joined the room)\n- Invited users (users with email invitations who haven't joined yet)\n\nAccess control:\n- Only room admin or members can view participants\n- Invited users show status as \"invited\"\n- Room members show status as \"member\"\n",
+        "description": "Retrieve list of all users associated with the room including:\n- Current members (users who have joined the room)\n- Invited users (users with email invitations who haven't joined yet)\n\nAccess control:\n- Any room member can view participants (members, editors, viewers, admins)\n- Room creator can always view participants\n- Invited users show status as \"invited\"\n- Room members show status as \"member\"\n",
         "tags": ["Room Access Management"],
         "security": [
           {
@@ -1303,11 +1315,12 @@
                         "properties": {
                           "user_id": {
                             "type": "string",
-                            "description": "User ID"
+                            "nullable": true,
+                            "description": "User ID (null for invited users who haven't joined yet)"
                           },
                           "email": {
                             "type": "string",
-                            "description": "Email address (only for invited users)"
+                            "description": "Email address (for both members and invited users)"
                           },
                           "status": {
                             "type": "string",
@@ -1346,7 +1359,7 @@
             }
           },
           "403": {
-            "description": "Access denied - Only room admin or members can view participants"
+            "description": "Access denied - Only room members can view participants"
           },
           "404": {
             "description": "Room not found"
@@ -1611,6 +1624,63 @@
           },
           "400": {
             "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/users/profile": {
+      "get": {
+        "summary": "Get current user profile",
+        "description": "Retrieve profile information for the authenticated user including ID, email, and display name",
+        "tags": ["User Profile"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "User profile retrieved successfully"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "User ID",
+                          "example": "550e8400-e29b-41d4-a716-446655440000"
+                        },
+                        "email": {
+                          "type": "string",
+                          "description": "User email address",
+                          "example": "user@example.com"
+                        },
+                        "name": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "User display name",
+                          "example": "John Doe"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"

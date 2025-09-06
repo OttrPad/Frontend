@@ -11,7 +11,7 @@ export function RightPanel() {
   };
 
   return (
-    <div className="h-full bg-card flex flex-col overflow-hidden">
+    <div className="h-full bg-card flex flex-col overflow-hidden z-0">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between">

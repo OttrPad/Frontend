@@ -1,6 +1,38 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { LoginForm } from "@/components/login-form";
+import { useUser } from "@/hooks/useUser";
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const { user, loading } = useUser();
+
+  // Redirect to /join if user is already logged in
+  useEffect(() => {
+    if (!loading && user) {
+      navigate("/join", { replace: true });
+    }
+  }, [user, loading, navigate]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-slate-950 via-black to-slate-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/95 via-black/90 to-slate-900/95"></div>
+
+        <div className="relative z-10 flex items-center space-x-2 text-orange-400">
+          <div className="w-8 h-8 border-2 border-orange-400/30 border-t-orange-400 rounded-full animate-spin"></div>
+          <span className="text-lg font-medium">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render login form if user is logged in (prevents flash)
+  if (user) {
+    return null;
+  }
+
   return (
     <div className="relative min-h-svh flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden bg-gradient-to-br from-slate-950 via-black to-slate-900">
       {/* Modern gradient background */}
