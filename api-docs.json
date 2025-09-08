@@ -1322,6 +1322,11 @@
                             "type": "string",
                             "description": "Email address (for both members and invited users)"
                           },
+                          "name": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Display name (for members only, from user profile)"
+                          },
                           "status": {
                             "type": "string",
                             "enum": ["member", "invited"],

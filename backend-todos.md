@@ -1,127 +1,132 @@
-# Backend TODOs for User Management
+# Backend TODOs
 
-## Issues Identified from Frontend
+## 🚨 URGENT: Fix Supabase Admin API Error in Room Participants
 
-### 1. Participants API Response Format ✅ SHOULD BE FIXED
+### Issue Description
 
-**Current Issue**: The `/api/rooms/{room_id}/participants` endpoint was returning incomplete or inconsistent user data.
+The backend is failing when trying to fetch room participants due to Supabase Admin API permissions error:
 
-**Frontend Updates Applied**:
-
-- Updated UsersPane to use the new unified API format from the API docs
-- Removed the separate call to `/api/rooms/{id}/access` for invited users
-- Now expects the `/api/rooms/{id}/participants` endpoint to return both members and invited users
-- Added proper handling for `user_id` being null for invited users
-- Improved email validation and user display logic
-
-**Expected API Response Format** (from updated API docs):
-
-```json
-{
-  "message": "Room participants retrieved successfully",
-  "participants": [
-    {
-      "user_id": "uuid-123",
-      "email": "user@example.com",
-      "status": "member",
-      "user_type": "admin",
-      "joined_at": "2024-01-15T10:30:00Z"
-    },
-    {
-      "user_id": null,
-      "email": "invited@example.com",
-      "status": "invited",
-      "user_type": "editor",
-      "invited_at": "2024-01-16T10:30:00Z",
-      "invited_by": "uuid-123"
-    }
-  ],
-  "total_count": 2
-}
+```
+⚠️ Admin getUserById failed for 475e7e07-4be1-4a9a-9c0c-7ab2877b13cb: AuthApiError: User not allowed
+    at async GoTrueAdminApi.getUserById
+    at async getRoomParticipants (Backend\apps\core\src\services\roomUserService.ts:114:11)
+    at async getRoomParticipantsHandler (Backend\apps\core\src\controllers\roomAccessController.ts:53:26)
+Error: { __isAuthError: true, status: 403, code: 'not_admin' }
 ```
 
-### 2. User Profile Data ✅ IMPLEMENTED
+### Root Cause
 
-**Frontend Solution**:
+The backend's `roomUserService.ts` is trying to use `supabase.auth.admin.getUserById()` which requires service role key privileges, but the current configuration doesn't have admin access.
 
-- Added `/api/users/profile` endpoint to apiClient
-- UserContext already provides normalized user profile data from Supabase
-- User display now uses email-based username extraction with proper fallbacks
+### Current Status
 
-### 3. Room Creator Information ✅ SHOULD BE WORKING
+- ❌ Admin API calls failing with 403 "not_admin" error
+- ✅ RPC fallback mechanism is working and successfully retrieving user data
+- ✅ Frontend API calls are correct and following documented endpoints
 
-**Current Status**:
+### Solution Options
 
-- Frontend caches room info including `created_by` field
-- Admin detection works based on room creator ID
-- Backup checks ensure room creator is always marked as admin
+#### Option 1: Configure Service Role Key (RECOMMENDED)
 
-### 4. Duplicate User Prevention ✅ FRONTEND FIXED
+**Files to modify:**
 
-**Frontend Fixes Applied**:
+- Backend environment configuration
+- Supabase client initialization for admin operations
 
-- Simplified user loading logic to rely on unified API response
-- Removed duplicate user addition and update logic
-- Added proper user existence checking
-- Only manually add current user as absolute fallback (shouldn't happen with proper API)
+**Steps:**
 
-### 5. User Display Issues ✅ FRONTEND FIXED
+1. **Update Environment Variables**
 
-**Frontend Fixes Applied**:
+   ```env
+   # Add to your backend .env file
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+   ```
 
-- Improved `getDisplayName` function to show meaningful names
-- Added fallback to show last 6 chars of user ID when email unavailable
-- Better email validation in participant processing
-- Proper handling of invited users vs members
+2. **Update Supabase Admin Client Initialization**
 
-## Backend Verification Checklist
+   ```typescript
+   // In your backend Supabase configuration file
+   import { createClient } from "@supabase/supabase-js";
 
-### High Priority - Verify These Work Correctly:
+   const supabaseAdmin = createClient(
+     process.env.SUPABASE_URL!,
+     process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key, not anon key
+     {
+       auth: {
+         autoRefreshToken: false,
+         persistSession: false,
+       },
+     }
+   );
+   ```
 
-1. **Unified Participants Endpoint**:
+3. **Ensure roomUserService.ts uses admin client**
+   ```typescript
+   // In Backend\apps\core\src\services\roomUserService.ts around line 114
+   // Make sure you're using the admin client for getUserById calls
+   const userResponse = await supabaseAdmin.auth.admin.getUserById(userId);
+   ```
 
-   - `/api/rooms/{id}/participants` should return both members AND invited users in one response
-   - Members should have `status: "member"` and `user_id: "actual-id"`
-   - Invited users should have `status: "invited"` and `user_id: null`
-   - All participants should have valid `email` and `user_type` fields
+#### Option 2: Use RPC as Primary Method (ALTERNATIVE)
 
-2. **User Count Accuracy**:
+**Files to modify:**
 
-   - Verify that the API doesn't return duplicate entries
-   - Test with exactly 5 users in a room - should show exactly 5 in frontend
-   - Ensure current user appears only once in the response
+- `Backend\apps\core\src\services\roomUserService.ts`
 
-3. **Complete User Data**:
+**Steps:**
 
-   - All participants should have valid `email` addresses
-   - `user_type` should be one of: "admin", "editor", "viewer"
-   - Room creator should be marked as `user_type: "admin"`
+1. **Refactor getRoomParticipants function** (around line 114)
 
-4. **User Profile Endpoint**:
-   - `/api/users/profile` should return current user's complete profile
-   - Should include `id`, `email`, and optionally `name`
+   - Remove the admin API call attempt
+   - Use the existing RPC fallback as the primary method
+   - Keep the RPC call that's already working: `data: { id, email, name, created_at }`
 
-### Medium Priority:
+2. **Remove admin API dependency**
 
-5. **Access Control**:
+   ```typescript
+   // Instead of:
+   // const userResponse = await supabase.auth.admin.getUserById(userId);
 
-   - Ensure all room members (admin/editor/viewer) can access participants endpoint
-   - Verify proper error responses for unauthorized users
+   // Use the working RPC call directly:
+   const { data: userData, error } = await supabase.rpc("get_user_profile", {
+     user_id: userId,
+   });
+   ```
 
-6. **WebSocket Integration**:
-   - Verify that WebSocket connections don't create duplicate participant records
-   - Ensure real-time updates work correctly with the new unified format
+### Testing Requirements
 
-## Testing Recommendations
+After implementing the fix:
 
-1. **Test with exactly 5 users** in a room - frontend should show exactly 5
-2. **Test with mix of members and invited users** - both should appear correctly
-3. **Test user display** with various email formats and missing data
-4. **Test permission levels** - ensure all room members can view participants
-5. **Test real-time updates** - invite/join/leave should update participant list
+1. **Test the participants endpoint:**
 
-## Status Summary
+   ```bash
+   GET /api/rooms/{roomId}/participants
+   ```
 
-- ✅ **Frontend Issues Fixed**: User display, duplicate prevention, unified API handling
-- 🔄 **Backend Verification Needed**: Ensure API matches expected format from API docs
-- ⚠️ **Critical Test**: 5 users showing as 6 users issue should be resolved if API is correct
+2. **Verify no admin API errors in logs**
+
+3. **Confirm frontend UsersPane displays participants correctly**
+
+4. **Test with both:**
+   - Room members (users who have joined)
+   - Invited users (users with email invitations who haven't joined yet)
+
+### Impact
+
+- **High Priority**: This affects the core functionality of room user management
+- **User Experience**: Users cannot see room participants or manage access properly
+- **Frontend**: The frontend is already correctly implemented and waiting for backend fix
+
+### Related Files
+
+- `Backend\apps\core\src\services\roomUserService.ts` (line 114)
+- `Backend\apps\core\src\controllers\roomAccessController.ts` (line 53)
+- Backend environment configuration
+- Supabase client configuration
+
+### Notes
+
+- The RPC fallback is already working perfectly and returning correct user data
+- Frontend API client (`src/lib/apiClient.ts`) is correctly calling `/api/rooms/{id}/participants`
+- API documentation matches the frontend implementation
+- No frontend changes required - this is purely a backend configuration/implementation issue
