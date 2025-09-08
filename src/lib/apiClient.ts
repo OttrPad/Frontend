@@ -1,11 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import supabase from "./supabaseClient";
+
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const supabase = createClient(supabaseUrl, supabaseKey);
+
 
 // Types for API responses
 export interface Room {
