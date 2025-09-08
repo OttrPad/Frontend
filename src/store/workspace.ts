@@ -746,7 +746,35 @@ export const useAppStore = create<AppState>()(
       },
 
       setCurrentRoom: (roomId) => {
-        set({ currentRoom: roomId });
+        set((state) => {
+          const prev = state.currentRoom;
+          // Leave previous room if any
+          if (prev && prev !== roomId && socket.connected) {
+            socket.emit('leaveRoom', { roomId: prev });
+          }
+          return { currentRoom: roomId };
+        });
+        // After state update, ensure socket connected then join new room
+        queueMicrotask(async () => {
+          try {
+            // lazy import supabase client to avoid circular dependency issues
+            const mod = await import('../lib/supabaseClient');
+            const supabase = mod.default;
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
+            if (token) {
+              // dynamic import to avoid re-import ordering issues
+              const sockMod = await import('../lib/socket');
+              const s = sockMod.socket;
+              // Socket.IO client instance lacks typed auth extension; cast minimally
+              (s as unknown as { auth: Record<string, unknown>; connect: () => void }).auth = { token };
+              if (!s.connected) s.connect();
+              s.emit('joinRoom', { roomId });
+            }
+          } catch (e) {
+            console.warn('Room join socket setup failed', e);
+          }
+        });
       },
 
       setSidebarWidth: (width) => {

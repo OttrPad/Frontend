@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { connectSocketWithToken, socket } from "../../../lib/socket";
+import { connectSocketWithToken } from "../../../lib/socket";
 import supabase from "../../../lib/supabaseClient";
 import { useAppStore, useChatStore } from "../../../store/workspace";
 import { useAuth } from "../../../hooks/useAuth";
@@ -36,31 +36,32 @@ export function ChatPane() {
   // --- End JWT Auth Socket.IO Connect ---
 
   // Ensure the socket joins the selected room before sending messages
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!user || !roomId) return;
-      // Make sure we're authenticated and connected before joining
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        await connectSocketWithToken(token);
-      }
-      if (active) {
-        socket.emit("joinRoom", { roomId });
-      }
-    })();
+  // useEffect(() => {
+  //   let active = true;
+  //   (async () => {
+  //     if (!user || !roomId) return;
+  //     // Make sure we're authenticated and connected before joining
+  //     const { data } = await supabase.auth.getSession();
+  //     const token = data.session?.access_token;
+  //     if (token) {
+  //       await connectSocketWithToken(token);
+  //     }
+  //     if (active) {
+  //       socket.emit("joinRoom", { roomId });
+  //     }
+  //   })();
 
-    return () => {
-      active = false;
-      if (roomId) {
-        socket.emit("leaveRoom", { roomId });
-      }
-    };
-  }, [roomId, user]);
+  //   return () => {
+  //     active = false;
+  //     // if (roomId) {
+  //     //   socket.emit("leaveRoom", { roomId });
+  //     // }
+  //   };
+  // }, [roomId, user]);
 
   // Always jump to bottom when entering/switching rooms
   useEffect(() => {
+   
     requestAnimationFrame(() => scrollToBottom(false));
   }, [roomId]);
 
