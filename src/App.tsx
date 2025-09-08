@@ -7,6 +7,8 @@ import RoomsPage from "./pages/rooms/RoomsPage";
 import { useAppStore } from "./store/workspace";
 import { UserProvider } from "./contexts/UserContext";
 
+
+
 function App() {
   const { theme } = useAppStore();
 

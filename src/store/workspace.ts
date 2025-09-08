@@ -1,6 +1,9 @@
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
+import { socket} from "../lib/socket";
+
+
 import type {
   Block,
   FileNode,
@@ -10,7 +13,9 @@ import type {
   RunOutput,
   AIMessage,
   Lang,
+  ChatMessage,
 } from "../types/workspace";
+
 
 // Files Store
 interface FilesState {
@@ -90,13 +95,20 @@ interface AIState {
   sendMessage: (content: string) => void;
 }
 
+// Chat Store
+interface ChatState {
+  messages: Record<string, ChatMessage[]>; // keyed by room_id (stringified)
+  sendChat: (roomId: string | number, uid: string, message: string, email?: string) => void;
+  clearChat: (roomId: string | number) => void;
+}
+
 // App Store (general settings)
 interface AppState {
   theme: "light" | "dark";
   currentRoom: string | null;
   sidebarWidth: number;
   rightPanelWidth: number;
-  activeActivity: "files" | "users" | "tests" | "versions" | "ai";
+  activeActivity: "files" | "users" | "tests" | "versions" | "ai" | "chat";
   isLeftSidebarCollapsed: boolean;
   isRightSidebarCollapsed: boolean;
   toggleTheme: () => void;
@@ -104,7 +116,7 @@ interface AppState {
   setSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
   setActiveActivity: (
-    activity: "files" | "users" | "tests" | "versions" | "ai"
+    activity: "files" | "users" | "tests" | "versions" | "ai" | "chat"
   ) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
@@ -602,6 +614,121 @@ export const useAIStore = create<AIState>()(
     { name: "ai-store" }
   )
 );
+
+
+
+
+socket.on("connect", () => {
+  console.log("Connected to socket.io server");
+});
+
+
+// Message from server
+socket.on('message', (message: unknown) => {
+  console.log(message);
+  outputMessage(message);
+});
+
+function outputMessage(message: unknown) {
+  // Normalize payload
+  let roomId: string | number | undefined;
+  let uid: string = "system";
+  let email: string | undefined;
+  let text: string | undefined;
+  let created: string | number = Date.now();
+
+  if (typeof message === "string") {
+    text = message;
+  } else if (message && typeof message === "object") {
+    const m = message as {
+      room_id?: string | number;
+      roomId?: string | number;
+      uid?: string;
+      userId?: string;
+      email?: string;
+      message?: string;
+      content?: string;
+      text?: string;
+      created_at?: string | number;
+      createdAt?: string | number;
+    };
+    roomId = m.room_id ?? m.roomId;
+    uid = m.uid ?? m.userId ?? uid;
+    email = m.email;
+    text = m.message ?? m.content ?? m.text;
+    created = m.created_at ?? m.createdAt ?? created;
+  }
+
+  // Fallback to current room if not provided
+  if (roomId == null) {
+    const current = useAppStore.getState().currentRoom ?? "global";
+    roomId = current;
+  }
+
+  if (!text) return; // nothing to show
+
+  const key = String(roomId);
+  const entry: ChatMessage = {
+    room_id: roomId,
+    uid,
+  email,
+    message: text,
+    created_at: created,
+  };
+
+  const s = useChatStore.getState();
+  const current = s.messages[key] ?? [];
+  useChatStore.setState({ messages: { ...s.messages, [key]: [...current, entry] } });
+}
+
+export const useChatStore = create<ChatState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        messages: {},
+
+        sendChat: (roomId, uid, message, email) => {
+          if (roomId === null || roomId === undefined || !String(message).trim()) {
+            return;
+          }
+          // Emit using backend-expected keys
+          socket.emit("chat:send", {
+            roomId,
+            uid,
+            message,
+            email,
+          });
+          // Optimistic append
+          const key = String(roomId);
+          const newMsg: ChatMessage = {
+            room_id: roomId,
+            uid,
+            email,
+            message,
+            created_at: Date.now(),
+          };
+          const current = get().messages[key] ?? [];
+          set({ messages: { ...get().messages, [key]: [...current, newMsg] } });
+          console.log("Message sent:", { roomId, uid, message });
+        },
+
+        clearChat: (roomId) => {
+          const next = { ...get().messages } as Record<string, ChatMessage[]>;
+          next[String(roomId)] = [];
+          set({ messages: next });
+        },
+      }),
+      {
+        name: "chat-history", // localStorage key
+        version: 1,
+        storage: createJSONStorage(() => localStorage),
+        partialize: (state) => ({ messages: state.messages }),
+      }
+    ),
+    { name: "chat-store-devtools" }
+  )
+);
+
 
 export const useAppStore = create<AppState>()(
   devtools(

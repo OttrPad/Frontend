@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabase } from "../lib/apiClient";
+import supabase from "../lib/supabaseClient";
 import { toast } from "react-toastify";
 
 export function LoginForm({

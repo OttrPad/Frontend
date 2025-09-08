@@ -4,6 +4,7 @@ import { UsersPane } from "./panels/UsersPane";
 import { TestsPane } from "./panels/TestsPane";
 import { VersionsPane } from "./panels/VersionsPane";
 import { AIAssistPane } from "./panels/AIAssistPane";
+import { ChatPane } from "./panels/ChatPane";
 
 export function LeftSidebar() {
   const { activeActivity, currentRoom } = useAppStore();
@@ -34,6 +35,12 @@ export function LeftSidebar() {
         return (
           <div className="h-full">
             <AIAssistPane />
+          </div>
+        );
+      case "chat":
+        return (
+          <div className="h-full">
+            <ChatPane />
           </div>
         );
       default:
