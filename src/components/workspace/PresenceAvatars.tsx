@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { usePresenceStore } from "../../store/workspace";
-import { useAuth } from "../../hooks/useAuth";
+import { useUser } from "../../hooks/useUser";
 import { apiClient } from "../../lib/apiClient";
 
 interface Participant {
@@ -16,7 +16,7 @@ interface PresenceAvatarsProps {
 
 export function PresenceAvatars({ roomId }: PresenceAvatarsProps) {
   const { users, currentUser } = usePresenceStore();
-  const { user: authUser } = useAuth();
+  const { userProfile } = useUser();
   const [participants, setParticipants] = useState<Participant[]>([]);
 
   // Fetch real participants if roomId is provided
@@ -99,12 +99,12 @@ export function PresenceAvatars({ roomId }: PresenceAvatarsProps) {
   }
 
   // Ensure current user is included and highlighted
-  const currentUserId = authUser?.id || currentUser?.id;
+  const currentUserId = userProfile?.id || currentUser?.id;
   if (currentUserId && !displayUsers.find((u) => u.id === currentUserId)) {
     const currentUserData = {
       id: currentUserId,
-      name: authUser?.email?.split("@")[0] || "You",
-      email: authUser?.email || "",
+      name: userProfile?.name || "You",
+      email: userProfile?.email || "",
       color: getColorForUser(currentUserId),
       avatar: null,
     };

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { useAppStore, usePresenceStore } from "../../store/workspace";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
-import { useAuth } from "../../hooks/useAuth";
+import { useUser } from "../../hooks/useUser";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
 import { ActivityBar } from "../../components/workspace/ActivityBar";
 import { LeftSidebar } from "../../components/workspace/LeftSidebar";
@@ -48,7 +48,7 @@ export default function WorkspacePage() {
     roomId?: string;
     roomCode?: string;
   }>();
-  const { user, loading } = useAuth();
+  const { user, userProfile, loading } = useUser();
   const {
     setCurrentRoom,
     sidebarWidth,
@@ -68,6 +68,17 @@ export default function WorkspacePage() {
   const [roomAccessLoading, setRoomAccessLoading] = useState(true);
   const [hasRoomAccess, setHasRoomAccess] = useState(false);
   const [roomAccessError, setRoomAccessError] = useState<string | null>(null);
+
+  // Cache for room access validation to avoid re-validating on tab switches
+  const [roomAccessCache, setRoomAccessCache] = useState<{
+    roomId: string;
+    userId: string;
+    hasAccess: boolean;
+    validatedAt: number;
+  } | null>(null);
+
+  // Cache timeout (10 minutes for room access)
+  const ROOM_ACCESS_CACHE_TIMEOUT = 10 * 60 * 1000;
 
   // Enable keyboard shortcuts
   const { showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
@@ -139,8 +150,13 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (roomIdentifier) {
       setCurrentRoom(roomIdentifier);
+
+      // Clear cache if navigating to a different room
+      if (roomAccessCache && roomAccessCache.roomId !== roomIdentifier) {
+        setRoomAccessCache(null);
+      }
     }
-  }, [roomIdentifier, setCurrentRoom]);
+  }, [roomIdentifier, setCurrentRoom, roomAccessCache]);
 
   // Validate room access when user and roomIdentifier are available
   useEffect(() => {
@@ -148,6 +164,22 @@ export default function WorkspacePage() {
 
     const validateRoomAccess = async () => {
       if (!user || !roomIdentifier) {
+        setRoomAccessLoading(false);
+        return;
+      }
+
+      // Check cache first
+      const now = Date.now();
+
+      if (
+        roomAccessCache &&
+        roomAccessCache.roomId === roomIdentifier &&
+        roomAccessCache.userId === user.id &&
+        now - roomAccessCache.validatedAt < ROOM_ACCESS_CACHE_TIMEOUT
+      ) {
+        // Use cached result
+        setHasRoomAccess(roomAccessCache.hasAccess);
+        setRoomAccessError(roomAccessCache.hasAccess ? null : "access_denied");
         setRoomAccessLoading(false);
         return;
       }
@@ -178,25 +210,42 @@ export default function WorkspacePage() {
         if (isMounted) {
           setHasRoomAccess(true);
           setRoomAccessError(null);
+
+          // Cache the successful validation
+          setRoomAccessCache({
+            roomId: roomIdentifier,
+            userId: user.id,
+            hasAccess: true,
+            validatedAt: now,
+          });
         }
       } catch (error) {
         if (isMounted) {
           setHasRoomAccess(false);
 
+          let errorType = "unknown_error";
           if (error instanceof ApiRequestError) {
             switch (error.statusCode) {
               case 403:
-                setRoomAccessError("access_denied");
+                errorType = "access_denied";
                 break;
               case 404:
-                setRoomAccessError("room_not_found");
+                errorType = "room_not_found";
                 break;
               default:
-                setRoomAccessError("unknown_error");
+                errorType = "unknown_error";
             }
-          } else {
-            setRoomAccessError("unknown_error");
           }
+
+          setRoomAccessError(errorType);
+
+          // Cache the failed validation (with shorter timeout)
+          setRoomAccessCache({
+            roomId: roomIdentifier,
+            userId: user.id,
+            hasAccess: false,
+            validatedAt: now,
+          });
         }
       } finally {
         if (isMounted) {
@@ -210,20 +259,20 @@ export default function WorkspacePage() {
     return () => {
       isMounted = false;
     };
-  }, [user, roomIdentifier]);
+  }, [user, roomIdentifier, roomAccessCache, ROOM_ACCESS_CACHE_TIMEOUT]);
 
   // Set current user in presence store
   useEffect(() => {
-    if (user) {
+    if (userProfile) {
       setCurrentUser({
-        id: user.id,
-        name: user.email?.split("@")[0] || "User",
-        email: user.email || "",
-        color: getColorForUser(user.id),
-        avatar: undefined,
+        id: userProfile.id,
+        name: userProfile.name,
+        email: userProfile.email,
+        color: getColorForUser(userProfile.id),
+        avatar: userProfile.avatar || undefined,
       });
     }
-  }, [user, setCurrentUser]);
+  }, [userProfile, setCurrentUser]);
 
   // Show loading while checking auth or room access
   if (loading || roomAccessLoading) {
@@ -347,7 +396,7 @@ export default function WorkspacePage() {
           <EditorTopbar roomId={roomIdentifier} />
 
           {/* Main Layout */}
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 overflow-hidden z-0">
             {/* Activity Bar (always visible) */}
             <ActivityBar />
 

@@ -5,6 +5,7 @@ import WorkspacePage from "./pages/workspace/WorkspacePage";
 import { ToastContainer } from "react-toastify";
 import RoomsPage from "./pages/rooms/RoomsPage";
 import { useAppStore } from "./store/workspace";
+import { UserProvider } from "./contexts/UserContext";
 
 
 
@@ -19,7 +20,7 @@ function App() {
   }, [theme]);
 
   return (
-    <>
+    <UserProvider>
       <ToastContainer
         position="top-center"
         autoClose={4000}
@@ -54,7 +55,7 @@ function App() {
         <Route path="/room/:roomCode" element={<WorkspacePage />} />
         {/* <Route path="/Signup" element={<SignupPage />} /> */}
       </Routes>
-    </>
+    </UserProvider>
   );
 }
 

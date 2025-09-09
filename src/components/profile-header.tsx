@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/hooks/useUser";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { toast } from "react-toastify";
 
@@ -14,7 +14,7 @@ export function ProfileHeader({
   fixed = false,
   className = "",
 }: ProfileHeaderProps) {
-  const { user, signOut, loading } = useAuth();
+  const { user, userProfile, signOut, loading } = useUser();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useClickOutside<HTMLDivElement>(() =>
@@ -34,15 +34,12 @@ export function ProfileHeader({
 
   // Get user initials for avatar
   const getUserInitials = () => {
-    if (!user?.email) return "U";
-    return user.email.charAt(0).toUpperCase();
+    return userProfile?.initials || "U";
   };
 
   // Get user display name
   const getUserDisplayName = () => {
-    return (
-      user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"
-    );
+    return userProfile?.name || "User";
   };
 
   if (loading) {
@@ -140,7 +137,7 @@ export function ProfileHeader({
                   <p className="text-white font-medium text-sm">
                     {getUserDisplayName()}
                   </p>
-                  <p className="text-white/50 text-xs">{user.email}</p>
+                  <p className="text-white/50 text-xs">{userProfile?.email}</p>
                 </div>
 
                 {/* Dropdown Arrow */}
@@ -168,7 +165,9 @@ export function ProfileHeader({
                     <p className="text-white font-medium text-sm">
                       {getUserDisplayName()}
                     </p>
-                    <p className="text-white/50 text-xs">{user.email}</p>
+                    <p className="text-white/50 text-xs">
+                      {userProfile?.email}
+                    </p>
                   </div>
 
                   <button
