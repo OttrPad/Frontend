@@ -352,6 +352,18 @@ class ApiClient {
   async checkServicesHealth(): Promise<ServicesHealthResponse> {
     return this.request("/health/services");
   }
+
+  // User profile methods
+  async getUserProfile(): Promise<{
+    message: string;
+    user: {
+      id: string;
+      email: string;
+      name?: string;
+    };
+  }> {
+    return this.request("/api/users/profile");
+  }
 }
 
 // Export singleton instance

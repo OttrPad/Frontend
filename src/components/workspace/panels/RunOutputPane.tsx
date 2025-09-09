@@ -37,11 +37,9 @@ export function RunOutputPane() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-gray-700">
+      <div className="flex-shrink-0 p-4 ">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Terminal className="w-5 h-5 text-orange-400" />
-            <h3 className="font-semibold text-foreground">Run Output</h3>
             {isRunning && (
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
             )}

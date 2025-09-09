@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import {
   Play,
@@ -11,6 +13,7 @@ import {
   StopCircle,
   Menu,
   PanelRightOpen,
+  LogOut,
 } from "lucide-react";
 import {
   useAppStore,
@@ -19,6 +22,7 @@ import {
 } from "../../store/workspace";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
+import { toast } from "react-toastify";
 
 interface EditorTopbarProps {
   roomId: string;
@@ -29,8 +33,49 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
     useAppStore();
   const { addBlock, runAllBlocks, blocks } = useBlocksStore();
   const { saveMilestone } = useMilestonesStore();
+  const navigate = useNavigate();
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+
+  // Handle click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const settingsButton = document.querySelector("[data-settings-button]");
+      const settingsMenu = document.querySelector("[data-settings-menu]");
+
+      if (
+        showSettingsMenu &&
+        !settingsButton?.contains(target) &&
+        !settingsMenu?.contains(target)
+      ) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSettingsMenu]);
+
+  const handleSettingsClick = (event: React.MouseEvent) => {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+
+    setMenuPosition({
+      top: rect.bottom + 8, // 8px below the button
+      right: window.innerWidth - rect.right, // align right edge
+    });
+
+    setShowSettingsMenu(!showSettingsMenu);
+  };
+
+  const handleLeaveRoom = () => {
+    setShowSettingsMenu(false);
+    toast.success("Left room successfully");
+    navigate("/join");
+  };
 
   const handleRunAll = () => {
     setIsRunning(true);
@@ -166,14 +211,43 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             )}
           </Button>
 
-          {/* Settings */}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-foreground/60 hover:text-foreground hover:bg-accent"
-          >
-            <Settings className="w-4 h-4" />
-          </Button>
+          {/* Settings Dropdown */}
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="ghost"
+              data-settings-button
+              onClick={handleSettingsClick}
+              className={`text-foreground/60 hover:text-foreground hover:bg-accent ${
+                showSettingsMenu ? "bg-accent text-foreground" : ""
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+
+            {showSettingsMenu &&
+              createPortal(
+                <div
+                  data-settings-menu
+                  className="fixed w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-xl z-[9999]"
+                  style={{
+                    top: `${menuPosition.top}px`,
+                    right: `${menuPosition.right}px`,
+                  }}
+                >
+                  <div className="py-1">
+                    <button
+                      onClick={handleLeaveRoom}
+                      className="flex items-center w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Leave Room
+                    </button>
+                  </div>
+                </div>,
+                document.body
+              )}
+          </div>
         </div>
       </div>
 
