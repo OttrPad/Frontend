@@ -1,8 +1,7 @@
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
-import { socket} from "../lib/socket";
-
+import { socket } from "../lib/socket";
 
 import type {
   Block,
@@ -15,7 +14,6 @@ import type {
   Lang,
   ChatMessage,
 } from "../types/workspace";
-
 
 // Files Store
 interface FilesState {
@@ -98,7 +96,12 @@ interface AIState {
 // Chat Store
 interface ChatState {
   messages: Record<string, ChatMessage[]>; // keyed by room_id (stringified)
-  sendChat: (roomId: string | number, uid: string, message: string, email?: string) => void;
+  sendChat: (
+    roomId: string | number,
+    _uid: string,
+    message: string,
+    _email?: string
+  ) => void;
   clearChat: (roomId: string | number) => void;
 }
 
@@ -615,18 +618,69 @@ export const useAIStore = create<AIState>()(
   )
 );
 
-
-
-
 socket.on("connect", () => {
   console.log("Connected to socket.io server");
 });
 
+socket.on("connect_error", (error: Error) => {
+  console.error("Connection failed:", error.message);
+  // Handle authentication failures
+  if (
+    error.message.includes("Authentication") ||
+    error.message.includes("token")
+  ) {
+    console.error("Authentication failed - redirecting to login");
+    // You might want to redirect to login or refresh token here
+    // window.location.href = "/login";
+  }
+});
 
 // Message from server
-socket.on('message', (message: unknown) => {
-  console.log(message);
+socket.on("message", (message: unknown) => {
+  console.log("Received message:", message);
   outputMessage(message);
+});
+
+// Chat history from server
+socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
+  console.log("Received chat history:", data);
+  const roomKey = String(data.roomId);
+  const historicalMessages = data.messages
+    .map((msg) => {
+      // Convert server message format to our ChatMessage format
+      if (typeof msg === "object" && msg) {
+        const m = msg as Record<string, unknown>;
+        return {
+          room_id: data.roomId,
+          uid: (m.uid as string) || "system",
+          email: m.email as string | undefined,
+          message: (m.content as string) || (m.message as string) || "",
+          created_at:
+            (m.timestamp as string | number) ||
+            (m.created_at as string | number) ||
+            Date.now(),
+          message_id: m.message_id as number | undefined,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  // Replace existing messages for this room with history
+  const chatStore = useChatStore.getState();
+  useChatStore.setState({
+    messages: {
+      ...chatStore.messages,
+      [roomKey]: historicalMessages as ChatMessage[],
+    },
+  });
+});
+
+// Chat errors from server
+socket.on("chat:error", (error: { message: string }) => {
+  console.error("Chat error:", error.message);
+  // You might want to show a toast notification here
+  // toast.error(error.message);
 });
 
 function outputMessage(message: unknown) {
@@ -651,12 +705,13 @@ function outputMessage(message: unknown) {
       text?: string;
       created_at?: string | number;
       createdAt?: string | number;
+      timestamp?: string | number;
     };
     roomId = m.room_id ?? m.roomId;
     uid = m.uid ?? m.userId ?? uid;
     email = m.email;
     text = m.message ?? m.content ?? m.text;
-    created = m.created_at ?? m.createdAt ?? created;
+    created = m.created_at ?? m.createdAt ?? m.timestamp ?? created;
   }
 
   // Fallback to current room if not provided
@@ -668,17 +723,39 @@ function outputMessage(message: unknown) {
   if (!text) return; // nothing to show
 
   const key = String(roomId);
+
+  // Check for duplicates - prevent messages with same content from same user within 1 second
+  const chatState = useChatStore.getState();
+  const existingMessages = chatState.messages[key] ?? [];
+  const isDuplicate = existingMessages.some(
+    (msg) =>
+      msg.uid === uid &&
+      msg.message === text &&
+      Math.abs(Number(msg.created_at) - Number(created)) < 1000 // within 1 second
+  );
+
+  if (isDuplicate) {
+    console.log("Duplicate message detected, skipping:", {
+      uid,
+      text,
+      created,
+    });
+    return;
+  }
+
   const entry: ChatMessage = {
     room_id: roomId,
     uid,
-  email,
+    email,
     message: text,
     created_at: created,
   };
 
-  const s = useChatStore.getState();
-  const current = s.messages[key] ?? [];
-  useChatStore.setState({ messages: { ...s.messages, [key]: [...current, entry] } });
+  const chatStore = useChatStore.getState();
+  const currentMessages = chatStore.messages[key] ?? [];
+  useChatStore.setState({
+    messages: { ...chatStore.messages, [key]: [...currentMessages, entry] },
+  });
 }
 
 export const useChatStore = create<ChatState>()(
@@ -687,29 +764,41 @@ export const useChatStore = create<ChatState>()(
       (set, get) => ({
         messages: {},
 
-        sendChat: (roomId, uid, message, email) => {
-          if (roomId === null || roomId === undefined || !String(message).trim()) {
+        sendChat: (roomId, _uid, message, _email) => {
+          // Note: _uid and _email parameters are kept for interface compatibility
+          // but not sent to server as it determines user from JWT token
+          void _email; // Suppress unused parameter warning
+
+          if (
+            roomId === null ||
+            roomId === undefined ||
+            !String(message).trim()
+          ) {
             return;
           }
-          // Emit using backend-expected keys
-          socket.emit("chat:send", {
-            roomId,
-            uid,
-            message,
-            email,
-          });
-          // Optimistic append
-          const key = String(roomId);
-          const newMsg: ChatMessage = {
-            room_id: roomId,
-            uid,
-            email,
-            message,
-            created_at: Date.now(),
-          };
-          const current = get().messages[key] ?? [];
-          set({ messages: { ...get().messages, [key]: [...current, newMsg] } });
-          console.log("Message sent:", { roomId, uid, message });
+
+          // Send message to server without optimistic update
+          // The message will appear when the server echoes it back
+          // Note: uid and email are not sent as the server determines user from JWT token
+          socket.emit(
+            "chat:send",
+            {
+              roomId,
+              message,
+            },
+            (response: { ok: boolean; error?: string }) => {
+              if (!response.ok && response.error) {
+                console.error("Failed to send message:", response.error);
+                // Show error to user (you might want to add a toast notification here)
+              } else {
+                console.log("Message sent successfully:", {
+                  roomId,
+                  uid: _uid,
+                  message,
+                });
+              }
+            }
+          );
         },
 
         clearChat: (roomId) => {
@@ -728,7 +817,6 @@ export const useChatStore = create<ChatState>()(
     { name: "chat-store-devtools" }
   )
 );
-
 
 export const useAppStore = create<AppState>()(
   devtools(
@@ -750,7 +838,7 @@ export const useAppStore = create<AppState>()(
           const prev = state.currentRoom;
           // Leave previous room if any
           if (prev && prev !== roomId && socket.connected) {
-            socket.emit('leaveRoom', { roomId: prev });
+            socket.emit("join-room", { roomId: prev }); // Note: No leave event in new API, just join new room
           }
           return { currentRoom: roomId };
         });
@@ -758,21 +846,28 @@ export const useAppStore = create<AppState>()(
         queueMicrotask(async () => {
           try {
             // lazy import supabase client to avoid circular dependency issues
-            const mod = await import('../lib/supabaseClient');
+            const mod = await import("../lib/supabaseClient");
             const supabase = mod.default;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
             if (token) {
               // dynamic import to avoid re-import ordering issues
-              const sockMod = await import('../lib/socket');
+              const sockMod = await import("../lib/socket");
               const s = sockMod.socket;
               // Socket.IO client instance lacks typed auth extension; cast minimally
-              (s as unknown as { auth: Record<string, unknown>; connect: () => void }).auth = { token };
+              (
+                s as unknown as {
+                  auth: Record<string, unknown>;
+                  connect: () => void;
+                }
+              ).auth = { token };
               if (!s.connected) s.connect();
-              s.emit('joinRoom', { roomId });
+              s.emit("join-room", { roomId });
+              // Request chat history after joining
+              s.emit("request-chat-history", { roomId });
             }
           } catch (e) {
-            console.warn('Room join socket setup failed', e);
+            console.warn("Room join socket setup failed", e);
           }
         });
       },
