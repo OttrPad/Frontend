@@ -14,12 +14,15 @@ import {
   Menu,
   PanelRightOpen,
   LogOut,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import {
   useAppStore,
   useBlocksStore,
   useMilestonesStore,
 } from "../../store/workspace";
+import { useCollaboration } from "../../hooks/useCollaboration";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
 import { toast } from "react-toastify";
@@ -33,6 +36,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
     useAppStore();
   const { addBlock, runAllBlocks, blocks } = useBlocksStore();
   const { saveMilestone } = useMilestonesStore();
+  const { isConnected, activeUsers } = useCollaboration();
   const navigate = useNavigate();
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -172,6 +176,26 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
 
         {/* Right Section */}
         <div className="flex items-center space-x-3">
+          {/* Collaboration Status */}
+          <div className="flex items-center space-x-2">
+            {isConnected ? (
+              <div className="flex items-center text-green-400 text-xs">
+                <Wifi className="w-3 h-3 mr-1" />
+                <span>Connected</span>
+                {activeUsers.length > 1 && (
+                  <span className="ml-1 text-muted-foreground">
+                    ({activeUsers.length} users)
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center text-orange-400 text-xs">
+                <WifiOff className="w-3 h-3 mr-1" />
+                <span>Offline</span>
+              </div>
+            )}
+          </div>
+
           {/* Presence Avatars */}
           <PresenceAvatars roomId={roomId} />
 

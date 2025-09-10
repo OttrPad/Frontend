@@ -3,11 +3,16 @@ import { Editor, type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type { Block, Lang } from "../../types/workspace";
 import { useAppStore } from "../../store/workspace";
+import { useCollaboration } from "../../hooks/useCollaboration";
+import { MonacoBinding } from "y-monaco";
+import * as Y from "yjs";
+import type { WebsocketProvider } from "y-websocket";
 
 interface ModelInfo {
   model: editor.ITextModel;
   language: Lang;
   lastAccessed: number;
+  yjsBinding?: MonacoBinding; // Add Yjs binding for collaborative editing
 }
 
 const getMonacoLanguage = (lang: Lang): string => {
@@ -67,6 +72,8 @@ class MonacoModelManager {
   private monaco: Monaco | null = null;
   private models = new Map<string, ModelInfo>();
   private disposables: { dispose(): void }[] = [];
+  private yjsDoc: Y.Doc | null = null;
+  private provider: WebsocketProvider | null = null;
 
   // Constants for memory management
   private static readonly MAX_CACHED_MODELS = 50;
@@ -74,8 +81,14 @@ class MonacoModelManager {
 
   private cleanupTimer: NodeJS.Timeout | null = null;
 
-  constructor(monaco: Monaco) {
+  constructor(
+    monaco: Monaco,
+    yjsDoc?: Y.Doc | null,
+    provider?: WebsocketProvider | null
+  ) {
     this.monaco = monaco;
+    this.yjsDoc = yjsDoc || null;
+    this.provider = provider || null;
     this.startCleanupTimer();
   }
 
@@ -113,7 +126,8 @@ class MonacoModelManager {
   getOrCreateModel(
     blockId: string,
     content: string,
-    language: Lang
+    language: Lang,
+    editor?: editor.IStandaloneCodeEditor
   ): editor.ITextModel {
     const existingModel = this.models.get(blockId);
 
@@ -130,8 +144,12 @@ class MonacoModelManager {
         existingModel.language = language;
       }
 
-      // Update content if different
-      if (existingModel.model.getValue() !== content) {
+      // For collaboration, we don't manually update content as Yjs handles it
+      // Only update if no Yjs binding exists
+      if (
+        !existingModel.yjsBinding &&
+        existingModel.model.getValue() !== content
+      ) {
         existingModel.model.setValue(content);
       }
 
@@ -157,6 +175,33 @@ class MonacoModelManager {
       language,
       lastAccessed: Date.now(),
     };
+
+    // Set up Yjs binding for collaborative editing if available
+    if (this.yjsDoc && this.provider && editor) {
+      try {
+        const yText = this.yjsDoc.getText(`block-${blockId}`);
+
+        // Initialize Y.Text with current content if it's empty
+        if (yText.length === 0 && content) {
+          yText.insert(0, content);
+        }
+
+        const binding = new MonacoBinding(
+          yText,
+          model,
+          new Set([editor]),
+          this.provider.awareness
+        );
+
+        modelInfo.yjsBinding = binding;
+        console.log(`Created Yjs binding for block: ${blockId}`);
+      } catch (error) {
+        console.error(
+          `Failed to create Yjs binding for block ${blockId}:`,
+          error
+        );
+      }
+    }
 
     this.models.set(blockId, modelInfo);
 
@@ -187,14 +232,21 @@ class MonacoModelManager {
   disposeModel(blockId: string) {
     const modelInfo = this.models.get(blockId);
     if (modelInfo) {
+      // Dispose Yjs binding first
+      if (modelInfo.yjsBinding) {
+        modelInfo.yjsBinding.destroy();
+      }
       modelInfo.model.dispose();
       this.models.delete(blockId);
     }
   }
 
   dispose() {
-    // Dispose all models
+    // Dispose all models and their Yjs bindings
     this.models.forEach((modelInfo) => {
+      if (modelInfo.yjsBinding) {
+        modelInfo.yjsBinding.destroy();
+      }
       modelInfo.model.dispose();
     });
     this.models.clear();
@@ -237,6 +289,7 @@ export function SharedMonacoEditor({
   className = "",
 }: SharedMonacoEditorProps) {
   const { theme } = useAppStore();
+  const { yjsDoc, provider, isConnected, updateCursor } = useCollaboration();
   const [monaco, setMonaco] = useState<Monaco | null>(null);
   const [editor, setEditor] = useState<editor.IStandaloneCodeEditor | null>(
     null
@@ -255,8 +308,12 @@ export function SharedMonacoEditor({
       // Notify parent about Monaco initialization
       onMonacoInit?.(monacoInstance);
 
-      // Initialize model manager
-      modelManagerRef.current = new MonacoModelManager(monacoInstance);
+      // Initialize model manager with collaboration support
+      modelManagerRef.current = new MonacoModelManager(
+        monacoInstance,
+        yjsDoc,
+        provider
+      );
 
       // Configure themes (same as original MonacoEditor)
       monacoInstance.editor.defineTheme("ottrpad-dark", {
@@ -374,7 +431,7 @@ export function SharedMonacoEditor({
         },
       });
     },
-    [theme, onMonacoInit]
+    [theme, onMonacoInit, yjsDoc, provider]
   );
 
   // Update theme when it changes
@@ -402,11 +459,12 @@ export function SharedMonacoEditor({
         currentContentListenerRef.current = null;
       }
 
-      // Get or create model for the focused block
+      // Get or create model for the focused block with editor for Yjs binding
       const model = modelManagerRef.current.getOrCreateModel(
         block.id,
         block.content,
-        block.lang
+        block.lang,
+        editor
       );
 
       // Set the model on the editor
@@ -416,18 +474,46 @@ export function SharedMonacoEditor({
       editor.setScrollTop(0);
       editor.revealLine(1);
 
-      // Setup content change listener
+      // Setup content change listener (only for non-collaborative changes)
       currentContentListenerRef.current = model.onDidChangeContent(() => {
         const content = model.getValue();
-        onContentChange(focusedBlockId, content);
+        // Only call onContentChange if not connected to avoid conflicts with Yjs
+        if (!isConnected) {
+          onContentChange(focusedBlockId, content);
+        }
       });
+
+      // Setup cursor tracking for collaboration
+      if (isConnected && updateCursor) {
+        const cursorDisposable = editor.onDidChangeCursorPosition((e) => {
+          updateCursor(focusedBlockId, e.position.column, {
+            start: e.position.column,
+            end: e.position.column,
+          });
+        });
+
+        // Add to disposables for cleanup
+        currentContentListenerRef.current = {
+          dispose: () => {
+            cursorDisposable.dispose();
+          },
+        };
+      }
 
       // Focus the editor
       editor.focus();
     } catch (error) {
       console.error("Error switching editor model:", error);
     }
-  }, [focusedBlockId, blocks, editor, monaco, onContentChange]);
+  }, [
+    focusedBlockId,
+    blocks,
+    editor,
+    monaco,
+    onContentChange,
+    isConnected,
+    updateCursor,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { useAppStore, usePresenceStore } from "../../store/workspace";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useUser } from "../../hooks/useUser";
+import { useCollaboration } from "../../hooks/useCollaboration";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
 import { ActivityBar } from "../../components/workspace/ActivityBar";
 import { LeftSidebar } from "../../components/workspace/LeftSidebar";
@@ -49,6 +50,7 @@ export default function WorkspacePage() {
     roomCode?: string;
   }>();
   const { user, userProfile, loading } = useUser();
+  const { connect, disconnect, isConnected } = useCollaboration();
   const {
     setCurrentRoom,
     sidebarWidth,
@@ -60,6 +62,10 @@ export default function WorkspacePage() {
     setRightPanelWidth,
   } = useAppStore();
   const { setCurrentUser } = usePresenceStore();
+
+  // Store disconnect function in ref to prevent dependency issues
+  const disconnectRef = useRef(disconnect);
+  disconnectRef.current = disconnect;
 
   // Get the actual room identifier (either roomId or roomCode)
   const roomIdentifier = roomId || roomCode;
@@ -76,6 +82,12 @@ export default function WorkspacePage() {
     hasAccess: boolean;
     validatedAt: number;
   } | null>(null);
+
+  // Track connection attempts to prevent multiple connections
+  const connectionAttemptRef = useRef<string | null>(null);
+  const [connectionInitialized, setConnectionInitialized] = useState<
+    string | null
+  >(null);
 
   // Cache timeout (10 minutes for room access)
   const ROOM_ACCESS_CACHE_TIMEOUT = 10 * 60 * 1000;
@@ -260,6 +272,60 @@ export default function WorkspacePage() {
       isMounted = false;
     };
   }, [user, roomIdentifier, roomAccessCache, ROOM_ACCESS_CACHE_TIMEOUT]);
+
+  // Initialize collaboration when room access is granted
+  // Store connect function in ref to prevent dependency issues
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
+
+  // Initialize collaboration connection
+  useEffect(() => {
+    if (!hasRoomAccess || !roomIdentifier || isConnected) return;
+
+    // Don't reconnect to the same room if already initialized
+    if (connectionInitialized === roomIdentifier) {
+      console.log("⚠️ Room already initialized:", roomIdentifier);
+      return;
+    }
+
+    // Prevent duplicate connection attempts
+    if (connectionAttemptRef.current === roomIdentifier) {
+      console.log(
+        "⚠️ Connection already in progress for room:",
+        roomIdentifier
+      );
+      return;
+    }
+
+    console.log("🚀 Initializing collaboration for room:", roomIdentifier);
+    connectionAttemptRef.current = roomIdentifier;
+    setConnectionInitialized(roomIdentifier);
+    connectRef.current(roomIdentifier);
+  }, [hasRoomAccess, roomIdentifier, isConnected, connectionInitialized]); // Remove connect dependency
+
+  // Cleanup collaboration only on room change or unmount
+  useEffect(() => {
+    const currentRoom = roomIdentifier;
+    return () => {
+      if (currentRoom && connectionAttemptRef.current === currentRoom) {
+        console.log(
+          "🧹 Cleaning up collaboration connection for room:",
+          currentRoom
+        );
+        connectionAttemptRef.current = null;
+        setConnectionInitialized(null);
+        disconnectRef.current();
+      }
+    };
+  }, [roomIdentifier]); // Only depend on roomIdentifier
+
+  // Clear connection attempt ref when connection succeeds
+  useEffect(() => {
+    if (isConnected) {
+      connectionAttemptRef.current = null;
+      // Keep connectionInitialized to prevent reconnections to same room
+    }
+  }, [isConnected]);
 
   // Set current user in presence store
   useEffect(() => {

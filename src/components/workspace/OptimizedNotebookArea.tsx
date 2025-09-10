@@ -14,6 +14,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useBlocksStore } from "../../store/workspace";
+import { useCollaboration } from "../../hooks/useCollaboration";
 import { OptimizedBlock } from "./OptimizedBlock";
 import { SharedMonacoEditor } from "../monaco/SharedMonacoEditor";
 import { useIntersectionVirtualization } from "../../hooks/useVirtualization";
@@ -23,6 +24,12 @@ import type { Monaco } from "@monaco-editor/react";
 
 export function OptimizedNotebookArea() {
   const { blocks, addBlock, reorderBlocks, updateBlock } = useBlocksStore();
+  const {
+    isConnected,
+    addBlock: addCollabBlock,
+    updateBlock: updateCollabBlock,
+    moveBlock: moveCollabBlock,
+  } = useCollaboration();
   const [isDragging, setIsDragging] = useState(false);
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [monaco, setMonaco] = useState<Monaco | null>(null);
@@ -62,14 +69,28 @@ export function OptimizedNotebookArea() {
 
         if (oldIndex !== -1 && newIndex !== -1) {
           reorderBlocks(oldIndex, newIndex);
+
+          // Sync with collaboration if connected
+          if (isConnected && moveCollabBlock) {
+            moveCollabBlock(active.id as string, newIndex);
+          }
         }
       }
     },
-    [blocks, reorderBlocks]
+    [blocks, reorderBlocks, isConnected, moveCollabBlock]
   );
 
   const handleAddBlock = () => {
     const newBlockId = addBlock();
+
+    // Sync with collaboration if connected
+    if (isConnected && addCollabBlock) {
+      const newBlock = blocks.find((b) => b.id === newBlockId);
+      if (newBlock) {
+        addCollabBlock(newBlock, blocks.length - 1);
+      }
+    }
+
     // Focus the new block
     setTimeout(() => {
       setFocusedBlockId(newBlockId);
@@ -79,12 +100,21 @@ export function OptimizedNotebookArea() {
   const handleAddBlockAt = useCallback(
     (position: number) => {
       const newBlockId = addBlock(position);
+
+      // Sync with collaboration if connected
+      if (isConnected && addCollabBlock) {
+        const newBlock = blocks.find((b) => b.id === newBlockId);
+        if (newBlock) {
+          addCollabBlock(newBlock, position);
+        }
+      }
+
       // Focus the new block
       setTimeout(() => {
         setFocusedBlockId(newBlockId);
       }, 100);
     },
-    [addBlock]
+    [addBlock, addCollabBlock, blocks, isConnected]
   );
 
   const handleBlockFocus = useCallback((blockId: string) => {
@@ -94,8 +124,13 @@ export function OptimizedNotebookArea() {
   const handleContentChange = useCallback(
     (blockId: string, content: string) => {
       updateBlock(blockId, { content });
+
+      // Sync with collaboration if connected (only for non-collaborative changes)
+      if (isConnected && updateCollabBlock) {
+        updateCollabBlock(blockId, { content });
+      }
     },
-    [updateBlock]
+    [updateBlock, updateCollabBlock, isConnected]
   );
 
   const handleMonacoInit = useCallback((monacoInstance: Monaco) => {
