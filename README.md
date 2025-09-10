@@ -175,13 +175,34 @@ src/
    npm install
    ```
 
-3. **Start development server**
+3. **Set up environment variables**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Configure the following variables in your `.env` file:
+
+   ```env
+   # Backend API Configuration
+   VITE_API_URL=http://localhost:4000
+   VITE_BACKEND_URL=http://localhost:4000
+
+   # Chat Service Configuration (Collaboration Service)
+   VITE_CHAT_URL=http://localhost:5002
+
+   # Supabase Configuration
+   VITE_SUPABASE_URL=your-supabase-url
+   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+   ```
+
+4. **Start development server**
 
    ```bash
    npm run dev
    ```
 
-4. **Open in browser**
+5. **Open in browser**
    ```
    http://localhost:5173
    ```
