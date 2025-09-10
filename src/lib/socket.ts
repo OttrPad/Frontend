@@ -1,6 +1,7 @@
 import io from "socket.io-client";
+import { chatUrl } from "./constants";
 
-export const socket = io("http://localhost:4001", {
+export const socket = io(chatUrl, {
   autoConnect: false, // connect manually after setting token
 });
 

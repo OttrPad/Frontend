@@ -141,6 +141,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
   const loadParticipants = useCallback(async () => {
     try {
       setLoading(true);
+      console.log("🔍 UsersPane: Loading participants for roomId:", roomId);
 
       // Check cache first
       const now = Date.now();
@@ -151,10 +152,14 @@ export function UsersPane({ roomId }: UsersPaneProps) {
 
       // Get room info from cache or API
       if (needsRoomInfo) {
+        console.log("🔍 UsersPane: Fetching room info from API...");
         const roomsResponse = await apiClient.getAllRooms();
+        console.log("🔍 UsersPane: Rooms response:", roomsResponse);
+
         const currentRoom = roomsResponse.rooms?.find(
           (r) => r.room_code === roomId || r.room_id.toString() === roomId
         );
+        console.log("🔍 UsersPane: Found current room:", currentRoom);
 
         if (currentRoom) {
           currentRoomInfo = {
@@ -169,7 +174,10 @@ export function UsersPane({ roomId }: UsersPaneProps) {
       }
 
       // Get all participants (members + invited users) - New unified API
+      console.log("🔍 UsersPane: Fetching participants from API...");
       const participantsResponse = await apiClient.getRoomParticipants(roomId);
+      console.log("🔍 UsersPane: Participants response:", participantsResponse);
+
       const isRoomCreator = currentRoomInfo?.created_by === currentUser?.id;
 
       // Process all participants from the unified API response
@@ -267,9 +275,18 @@ export function UsersPane({ roomId }: UsersPaneProps) {
       setParticipants(allUsers);
       setIsAdmin(isRoomCreator);
       setError(null);
+      console.log(
+        "🔍 UsersPane: Successfully loaded participants:",
+        allUsers.length
+      );
     } catch (err) {
-      console.error("Failed to load room participants:", err);
+      console.error("🚨 UsersPane: Failed to load room participants:", err);
       if (err instanceof Error) {
+        console.error("🚨 UsersPane: Error details:", {
+          message: err.message,
+          stack: err.stack,
+          name: err.name,
+        });
         // More specific error messages based on the updated API
         if (
           err.message.includes("403") ||
@@ -284,6 +301,7 @@ export function UsersPane({ roomId }: UsersPaneProps) {
           setError(err.message || "Failed to load room participants");
         }
       } else {
+        console.error("🚨 UsersPane: Unknown error type:", typeof err, err);
         setError("Failed to load room participants");
       }
       setParticipants([]);
