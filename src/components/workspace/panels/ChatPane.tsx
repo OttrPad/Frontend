@@ -33,31 +33,7 @@ export function ChatPane() {
     }
     connectWithJWT();
   }, [user]);
-  // --- End JWT Auth Socket.IO Connect ---
 
-  // Ensure the socket joins the selected room before sending messages
-  // useEffect(() => {
-  //   let active = true;
-  //   (async () => {
-  //     if (!user || !roomId) return;
-  //     // Make sure we're authenticated and connected before joining
-  //     const { data } = await supabase.auth.getSession();
-  //     const token = data.session?.access_token;
-  //     if (token) {
-  //       await connectSocketWithToken(token);
-  //     }
-  //     if (active) {
-  //       socket.emit("joinRoom", { roomId });
-  //     }
-  //   })();
-
-  //   return () => {
-  //     active = false;
-  //     // if (roomId) {
-  //     //   socket.emit("leaveRoom", { roomId });
-  //     // }
-  //   };
-  // }, [roomId, user]);
 
   // Always jump to bottom when entering/switching rooms
   useEffect(() => {
