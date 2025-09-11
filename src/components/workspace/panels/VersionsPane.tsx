@@ -1,9 +1,5 @@
 import { useState } from "react";
-import {
-  useMilestonesStore,
-  useBlocksStore,
-  useFilesStore,
-} from "../../../store/workspace";
+import { useMilestonesStore, useBlocksStore } from "../../../store/workspace";
 import { Button } from "../../ui/button";
 import { GitBranch, Clock, Eye, RotateCcw, Trash2 } from "lucide-react";
 import { MonacoDiff } from "../../monaco/MonacoDiff";
@@ -18,10 +14,8 @@ export function VersionsPane() {
     deleteMilestone,
   } = useMilestonesStore();
   const { blocks } = useBlocksStore();
-  const { files } = useFilesStore();
 
   const [viewMode, setViewMode] = useState<"list" | "diff">("list");
-  const [diffTarget, setDiffTarget] = useState<"blocks" | "files">("blocks");
 
   const selectedMilestone = milestones.find(
     (m) => m.id === selectedMilestoneId
@@ -32,46 +26,21 @@ export function VersionsPane() {
   };
 
   const getCurrentContent = () => {
-    if (diffTarget === "blocks") {
-      return blocks
-        .map(
-          (block) =>
-            `# Block ${block.id}\n# Language: ${block.lang}\n${block.content}`
-        )
-        .join("\n\n---\n\n");
-    } else {
-      // Simplified file content representation
-      const fileContents = files
-        .map((file) => {
-          if (file.type === "file" && file.content) {
-            return `# ${file.path}\n${file.content}`;
-          }
-          return null;
-        })
-        .filter(Boolean);
-      return fileContents.join("\n\n---\n\n");
-    }
+    return blocks
+      .map(
+        (block) =>
+          `# Block ${block.id}\n# Language: ${block.lang}\n${block.content}`
+      )
+      .join("\n\n---\n\n");
   };
 
   const getMilestoneContent = (milestone: Milestone) => {
-    if (diffTarget === "blocks") {
-      return milestone.snapshot.blocks
-        .map(
-          (block) =>
-            `# Block ${block.id}\n# Language: ${block.lang}\n${block.content}`
-        )
-        .join("\n\n---\n\n");
-    } else {
-      const fileContents = milestone.snapshot.files
-        .map((file) => {
-          if (file.type === "file" && file.content) {
-            return `# ${file.path}\n${file.content}`;
-          }
-          return null;
-        })
-        .filter(Boolean);
-      return fileContents.join("\n\n---\n\n");
-    }
+    return milestone.snapshot.blocks
+      .map(
+        (block) =>
+          `# Block ${block.id}\n# Language: ${block.lang}\n${block.content}`
+      )
+      .join("\n\n---\n\n");
   };
 
   const handleViewDiff = (milestone: Milestone) => {
@@ -122,29 +91,10 @@ export function VersionsPane() {
 
         {viewMode === "diff" && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="flex bg-accent rounded-md p-1">
-                <button
-                  onClick={() => setDiffTarget("blocks")}
-                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                    diffTarget === "blocks"
-                      ? "bg-orange-500 text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                  }`}
-                >
-                  Code Blocks
-                </button>
-                <button
-                  onClick={() => setDiffTarget("files")}
-                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                    diffTarget === "files"
-                      ? "bg-orange-500 text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                  }`}
-                >
-                  Project Files
-                </button>
-              </div>
+            <div>
+              <h4 className="text-sm font-medium text-foreground">
+                Comparing Code Blocks
+              </h4>
             </div>
 
             <Button
@@ -247,17 +197,6 @@ export function VersionsPane() {
                               {milestone.snapshot.blocks.length} blocks
                             </span>
                           </span>
-                          <span className="flex items-center space-x-1">
-                            <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                            <span>
-                              {
-                                milestone.snapshot.files.filter(
-                                  (f) => f.type === "file"
-                                ).length
-                              }{" "}
-                              files
-                            </span>
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -276,11 +215,7 @@ export function VersionsPane() {
                       <h4 className="font-medium text-white mb-1">
                         Comparing: {selectedMilestone.name} → Current
                       </h4>
-                      <p className="text-sm text-gray-400">
-                        {diffTarget === "blocks"
-                          ? "Code Blocks"
-                          : "Project Files"}
-                      </p>
+                      <p className="text-sm text-gray-400">Code Blocks</p>
                     </div>
                   </div>
                 </div>

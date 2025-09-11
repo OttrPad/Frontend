@@ -11,6 +11,7 @@ import { RightPanel } from "../../components/workspace/RightPanel";
 import { KeyboardShortcutsModal } from "../../components/modals/KeyboardShortcutsModal";
 import { apiClient, ApiRequestError } from "../../lib/apiClient";
 import { Button } from "../../components/ui/button";
+import { CollaborationProvider } from "../../contexts/CollaborationContext";
 
 // Helper function to generate consistent colors for users
 function getColorForUser(userId: string): string {
@@ -360,7 +361,7 @@ export default function WorkspacePage() {
   }
 
   return (
-    <>
+    <CollaborationProvider>
       {/* Fixed Profile Header */}
       {/* <ProfileHeader fixed className="z-50" /> */}
 
@@ -449,6 +450,6 @@ export default function WorkspacePage() {
         open={showShortcutsModal}
         onClose={() => setShowShortcutsModal(false)}
       />
-    </>
+    </CollaborationProvider>
   );
 }
