@@ -711,7 +711,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
       }
       return null;
     })
-    .filter(Boolean);
+    .filter(Boolean); //removes any null values (so only valid message objects remain) 
 
   // Replace existing messages for this room with history
   const chatStore = useChatStore.getState();
@@ -726,7 +726,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
 // Chat errors from server
 socket.on("chat:error", (error: { message: string }) => {
   console.error("Chat error:", error.message);
-  // You might want to show a toast notification here
+ 
   // toast.error(error.message);
 });
 
@@ -881,39 +881,43 @@ export const useAppStore = create<AppState>()(
       },
 
       setCurrentRoom: (roomId) => {
-        set((state) => {
-          const prev = state.currentRoom;
-          // Leave previous room if any
-          if (prev && prev !== roomId && socket.connected) {
-            socket.emit("join-room", { roomId: prev }); // Note: No leave event in new API, just join new room
-          }
-          return { currentRoom: roomId };
-        });
-        // After state update, ensure socket connected then join new room
+        // Normalize and set currentRoom synchronously
+        const normalized = roomId == null ? null : String(roomId);
+  set({ currentRoom: normalized });
+
+        // Perform socket lifecycle actions asynchronously
         queueMicrotask(async () => {
           try {
-            // lazy import supabase client to avoid circular dependency issues
-            const mod = await import("../lib/supabaseClient");
-            const supabase = mod.default;
+            const supMod = await import("../lib/supabaseClient");
+            const supabase = supMod.default;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            // console.log('token', token);
 
-            if (token) {
-              // dynamic import to avoid re-import ordering issues
-              const sockMod = await import("../lib/socket");
-              const s = sockMod.socket;
-              // Socket.IO client instance lacks typed auth extension; cast minimally
-              (
-                s as unknown as {
-                  auth: Record<string, unknown>;
-                  connect: () => void;
-                }
-              ).auth = { token };
-              if (!s.connected) s.connect();
-              s.emit("join-room", { roomId });
-              // Request chat history after joining
-              s.emit("request-chat-history", { roomId });
+            if (!token) return;
+
+            // Use centralized connect helper from lib/socket
+            const sockHelpers = await import("../lib/socket");
+            const { connectSocketWithToken, socket: s } = sockHelpers;
+            await connectSocketWithToken(token);
+
+            const sockAny = s as unknown as { __lastJoinedRoom?: string | null; emit: (...args: unknown[]) => void };
+            const prev = sockAny.__lastJoinedRoom ?? null;
+            const next = normalized;
+
+            // If there's a previous different room, explicitly leave it if server supports it
+            if (prev && prev !== next) {
+              try {
+                sockAny.emit("leave-room", { roomId: prev });
+              } catch {
+                // ignore
+              }
+            }
+
+            // Only emit join if we're not already in the same room
+            if (next && prev !== next) {
+              sockAny.__lastJoinedRoom = next;
+              sockAny.emit("join-room", { roomId: next });
+              // s.emit("request-chat-history", { roomId: next });
             }
           } catch (e) {
             console.warn("Room join socket setup failed", e);
