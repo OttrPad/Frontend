@@ -90,7 +90,7 @@ interface AIState {
   isLoading: boolean;
   addMessage: (message: Omit<AIMessage, "id" | "timestamp">) => void;
   clearMessages: () => void;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string) => Promise<void>;
 }
 
 // Chat Store
@@ -563,10 +563,29 @@ export const useAIStore = create<AIState>()(
       isLoading: false,
 
       addMessage: (message) => {
+        // Translate some provider messages into helpful guidance for the user
+        const translateProviderMessage = (text: string) => {
+          if (!text) return text;
+          const t = String(text);
+          if (t.includes("Direct access to Core service is not allowed") || t.includes("Core service is not allowed")) {
+            return (
+              "AI provider rejected the request: Direct access to Core service is not allowed. " +
+              "Check server-side AI configuration (GEMINI_API_KEY / credentials) and gateway routing."
+            );
+          }
+          if (t.toLowerCase().includes("bearer token") || t.toLowerCase().includes("provide a valid bearer") || t.toLowerCase().includes("invalid bearer")) {
+            return (
+              "AI request failed: Missing or invalid Bearer token. Ensure your server sets GEMINI_API_KEY and forwards an Authorization: Bearer <token> header to the AI gateway."
+            );
+          }
+          return text;
+        };
+
         const newMessage: AIMessage = {
           ...message,
           id: uuidv4(),
           timestamp: Date.now(),
+          content: message.role === "assistant" ? translateProviderMessage(message.content) : message.content,
         };
 
         set((state) => ({
@@ -578,40 +597,66 @@ export const useAIStore = create<AIState>()(
         set({ messages: [] });
       },
 
-      sendMessage: (content) => {
+      sendMessage: async (content) => {
+        // optimistic add user message
         get().addMessage({ role: "user", content });
-
         set({ isLoading: true });
 
-        // Mock AI response
-        setTimeout(() => {
-          const responses = [
-            "I can help you with that! Here's a code suggestion:",
-            "Let me analyze your code and provide some improvements:",
-            "Based on your request, here's what I recommend:",
-            "Great question! Here's how you can implement that:",
-          ];
+        const mod = await import("../lib/apiClient");
+        const apiClient = mod.apiClient;
 
-          const randomResponse =
-            responses[Math.floor(Math.random() * responses.length)];
+        const maxAttempts = 3;
+        const delays = [1000, 2000, 4000]; // ms
+        let attempt = 0;
+        let lastError: unknown = null;
 
-          get().addMessage({
-            role: "assistant",
-            content: randomResponse,
-            actions: [
-              {
-                type: "insert_block",
-                data: {
-                  lang: "python",
-                  content:
-                    '# AI suggested code\nprint("This is an AI suggestion")',
-                },
-              },
-            ],
-          });
+  // Provide a transient retry hint message which we'll add between attempts
+  const addRetryHint = (msg: string) => get().addMessage({ role: "assistant", content: msg });
 
-          set({ isLoading: false });
-        }, 1500);
+        while (attempt < maxAttempts) {
+          try {
+            attempt += 1;
+            if (attempt > 1) {
+              addRetryHint(`Retrying AI request (attempt ${attempt}/${maxAttempts})...`);
+            }
+
+            const payload = await apiClient.generateAiContent(content);
+            const texts: string[] = Array.isArray(payload?.texts) ? payload.texts : [String(payload)];
+            for (const t of texts) {
+              get().addMessage({ role: "assistant", content: t });
+            }
+
+            // success
+            lastError = null;
+            break;
+          } catch (err) {
+            console.warn(`AI attempt ${attempt} failed`, err);
+            lastError = err;
+
+            // If it's a client/validation error or rate-limit, don't retry
+            const e = err as unknown as { statusCode?: number };
+            const status = e?.statusCode ?? (err && typeof err === "object" && (err as Error).message ? undefined : undefined);
+            // Retry only on server-side 5xx
+            const isServerError = typeof status === "number" ? status >= 500 && status < 600 : true;
+
+            if (attempt >= maxAttempts || !isServerError) {
+              break;
+            }
+
+            // wait before next attempt
+            const delay = delays[Math.min(attempt - 1, delays.length - 1)];
+            await new Promise((r) => setTimeout(r, delay));
+          }
+        }
+
+        if (lastError) {
+          console.error("AI request failed after retries", lastError);
+          const e = lastError as unknown as { statusCode?: number; message?: string };
+          const msg = e?.message || String(lastError);
+          get().addMessage({ role: "assistant", content: `AI request failed after ${maxAttempts} attempts: ${msg}. Try again later.` });
+        }
+
+        set({ isLoading: false });
       },
     }),
     { name: "ai-store" }
@@ -634,6 +679,8 @@ socket.on("connect_error", (error: Error) => {
     // window.location.href = "/login";
   }
 });
+
+
 
 // Message from server
 socket.on("message", (message: unknown) => {
@@ -850,6 +897,8 @@ export const useAppStore = create<AppState>()(
             const supabase = mod.default;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
+            // console.log('token', token);
+
             if (token) {
               // dynamic import to avoid re-import ordering issues
               const sockMod = await import("../lib/socket");
