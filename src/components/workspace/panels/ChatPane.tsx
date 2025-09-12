@@ -1,6 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { connectSocketWithToken } from "../../../lib/socket";
-import supabase from "../../../lib/supabaseClient";
 import { useAppStore, useChatStore } from "../../../store/workspace";
 import { useAuth } from "../../../hooks/useAuth";
 import { Button } from "../../ui/button";
@@ -21,18 +19,8 @@ export function ChatPane() {
   const roomId = currentRoom || "global";
   const roomMessages = useMemo(() => messages[String(roomId)] ?? [], [messages, roomId]);
 
-  // --- JWT Auth Socket.IO Connect (keep or undo as needed) ---
-  useEffect(() => {
-    async function connectWithJWT() {
-      if (!user) return;
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        await connectSocketWithToken(token);
-      }
-    }
-    connectWithJWT();
-  }, [user]);
+  
+
 
 
   // Always jump to bottom when entering/switching rooms
