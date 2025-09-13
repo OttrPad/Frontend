@@ -28,7 +28,6 @@ export function OptimizedNotebookArea() {
   const { blocks, updateBlock } = useBlocksStore();
 
   const { activeNotebookId } = useCollaboration();
-
   const { createBlockAt /*, deleteBlock*/ } =
     useRealtimeBlocks(activeNotebookId);
 
@@ -41,6 +40,47 @@ export function OptimizedNotebookArea() {
     top: 0,
     height: 120,
   });
+
+  // --- Content preservation shield -----------------------------------------
+  // Cache last known non-empty content for existing blocks.
+  const contentCacheRef = useRef<Map<string, string>>(new Map());
+  // Mark when we intentionally trigger a structural change (create/move)
+  const lastStructuralChangeRef = useRef<number>(0);
+
+  // Keep the cache up to date with any non-empty content we see
+  useEffect(() => {
+    for (const b of blocks) {
+      if (typeof b.content === "string" && b.content.length > 0) {
+        contentCacheRef.current.set(b.id, b.content);
+      }
+    }
+  }, [blocks]);
+
+  // If a structural change happened recently and we see existing blocks
+  // suddenly emptied, restore them from the cache (best-effort).
+  useEffect(() => {
+    const since = Date.now() - lastStructuralChangeRef.current;
+    if (since > 2000) return; // only intervene right after add/move
+
+    const toRestore: Array<{ id: string; content: string }> = [];
+    for (const b of blocks) {
+      const cached = contentCacheRef.current.get(b.id);
+      if (
+        cached &&
+        cached.length > 0 &&
+        (b.content == null || b.content.length === 0)
+      ) {
+        toRestore.push({ id: b.id, content: cached });
+      }
+    }
+    if (toRestore.length > 0) {
+      // batch restore
+      for (const r of toRestore) {
+        updateBlock(r.id, { content: r.content });
+      }
+    }
+  }, [blocks, updateBlock]);
+  // --------------------------------------------------------------------------
 
   // Virtualization for performance
   const { observeElement } = useIntersectionVirtualization(0.1);
@@ -64,7 +104,9 @@ export function OptimizedNotebookArea() {
       const newIndex = blocks.findIndex((b) => b.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Ask server to move; hook will refresh ordering via `block:moved`
+      // Mark structural change (so we can protect content briefly)
+      lastStructuralChangeRef.current = Date.now();
+
       try {
         await socketCollaborationService.moveBlock(
           activeNotebookId,
@@ -80,23 +122,38 @@ export function OptimizedNotebookArea() {
 
   const handleAddBlock = useCallback(() => {
     if (!activeNotebookId) return;
+
+    // Snapshot content before structural change
+    lastStructuralChangeRef.current = Date.now();
+    for (const b of blocks) {
+      if (b.content && b.content.length > 0) {
+        contentCacheRef.current.set(b.id, b.content);
+      }
+    }
+
     const position = blocks.length; // append
-    // Create via server; socket event will insert into store
     createBlockAt(position, "code", "python").catch((e) =>
       console.error("Failed to create block:", e)
     );
-    // Focus move will happen when the new block arrives; if you want optimistic focus,
-    // you could setFocusedBlockId to a temp id, but we’ll keep it simple.
-  }, [activeNotebookId, blocks.length, createBlockAt]);
+  }, [activeNotebookId, blocks, createBlockAt]);
 
   const handleAddBlockAt = useCallback(
     (position: number) => {
       if (!activeNotebookId) return;
+
+      // Snapshot content before structural change
+      lastStructuralChangeRef.current = Date.now();
+      for (const b of blocks) {
+        if (b.content && b.content.length > 0) {
+          contentCacheRef.current.set(b.id, b.content);
+        }
+      }
+
       createBlockAt(position, "code", "python").catch((e) =>
         console.error("Failed to create block:", e)
       );
     },
-    [activeNotebookId, createBlockAt]
+    [activeNotebookId, blocks, createBlockAt]
   );
 
   const handleBlockFocus = useCallback((blockId: string) => {
@@ -105,8 +162,13 @@ export function OptimizedNotebookArea() {
 
   const handleContentChange = useCallback(
     (blockId: string, content: string) => {
-      // This updates local UI; your YJS/editor layer should handle CRDT syncing separately
+      // Local UI update for snappy typing
       updateBlock(blockId, { content });
+      // Keep cache fresh too
+      if (content && content.length > 0) {
+        contentCacheRef.current.set(blockId, content);
+      }
+      // (Your YJS/socket emission should happen elsewhere in your pipeline)
     },
     [updateBlock]
   );
@@ -140,7 +202,6 @@ export function OptimizedNotebookArea() {
 
         editorPositionRef.current = { top, height };
 
-        // Position the shared editor (unchanged UI)
         sharedEditor.style.position = "absolute";
         sharedEditor.style.top = `${top}px`;
         sharedEditor.style.left = `${
@@ -175,7 +236,7 @@ export function OptimizedNotebookArea() {
     }
   }, [focusedBlockId, blocks]);
 
-  // Handle when focused block is deleted
+  // When the focused block is deleted, move focus gracefully
   useEffect(() => {
     if (focusedBlockId && !blocks.find((b) => b.id === focusedBlockId)) {
       if (blocks.length > 0) {
@@ -186,7 +247,7 @@ export function OptimizedNotebookArea() {
     }
   }, [focusedBlockId, blocks]);
 
-  // Keyboard shortcuts (unchanged)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!focusedBlockId) return;
@@ -205,15 +266,12 @@ export function OptimizedNotebookArea() {
         }
       } else if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
-        // Run current block (placeholder)
         const block = blocks.find((b) => b.id === focusedBlockId);
         if (block && !block.isRunning) {
-          // trigger execution ui
           console.log("Run block:", focusedBlockId);
         }
       } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        // Add new block below (via server)
         handleAddBlockAt(currentIndex + 1);
       }
     };
@@ -290,7 +348,7 @@ export function OptimizedNotebookArea() {
                         key={block.id}
                         ref={(element) => observeElement(block.id, element)}
                         data-block-index={index}
-                        data-block-id={block.id} // keep for shared editor positioning
+                        data-block-id={block.id}
                       >
                         <OptimizedBlock
                           block={block}
@@ -314,6 +372,8 @@ export function OptimizedNotebookArea() {
               >
                 <SharedMonacoEditor
                   focusedBlockId={focusedBlockId}
+                  // keep this prop if your editor expects it
+                  notebookId={activeNotebookId}
                   blocks={blocks}
                   onContentChange={handleContentChange}
                   onMonacoInit={handleMonacoInit}
@@ -326,7 +386,6 @@ export function OptimizedNotebookArea() {
         )}
       </div>
 
-      {/* Performance indicator (development only) */}
       {process.env.NODE_ENV === "development" && (
         <div className="absolute bottom-4 right-4 bg-black/50 text-white text-xs px-2 py-1 rounded">
           Focused:{" "}
