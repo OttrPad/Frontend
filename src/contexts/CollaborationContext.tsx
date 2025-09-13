@@ -1,4 +1,10 @@
-import React, { createContext, useEffect, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import { useParams } from "react-router-dom";
 import { useUser } from "../hooks/useUser";
 import { useBlocksStore } from "../store/workspace";
@@ -11,12 +17,19 @@ import {
 } from "../lib/socketCollaborationService";
 import type { Block, Lang } from "../types/workspace";
 
+/* ---------- helpers ---------- */
+function upsertNotebook(list: NotebookInfo[], item: NotebookInfo) {
+  const i = list.findIndex((nb) => nb.id === item.id);
+  if (i === -1) return [...list, item];
+  const next = list.slice();
+  next[i] = { ...next[i], ...item };
+  return next;
+}
+
 interface CollaborationContextType {
-  // Connection state
   isConnected: boolean;
   connectionError: string | null;
 
-  // Notebooks
   notebooks: NotebookInfo[];
   activeNotebookId: string | null;
   createNotebook: (title: string) => Promise<void>;
@@ -24,7 +37,6 @@ interface CollaborationContextType {
   switchNotebook: (notebookId: string) => Promise<void>;
   deleteNotebook: (notebookId: string) => Promise<void>;
 
-  // Real-time collaboration
   activeUsers: UserPresence[];
   sendCodeChange: (
     blockId: string,
@@ -33,7 +45,6 @@ interface CollaborationContextType {
   ) => void;
   sendCursorUpdate: (blockId: string, position: CursorPosition) => void;
 
-  // Loading states
   isLoadingNotebooks: boolean;
   isCreatingNotebook: boolean;
 }
@@ -41,7 +52,6 @@ interface CollaborationContextType {
 const CollaborationContext = createContext<CollaborationContextType | null>(
   null
 );
-
 export { CollaborationContext };
 
 interface CollaborationProviderProps {
@@ -55,10 +65,11 @@ export function CollaborationProvider({
     roomId?: string;
     roomCode?: string;
   }>();
+  const roomIdentifier = roomId || roomCode;
   const { session } = useUser();
   const { updateBlock } = useBlocksStore();
 
-  // State
+  // state
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [notebooks, setNotebooks] = useState<NotebookInfo[]>([]);
@@ -67,290 +78,318 @@ export function CollaborationProvider({
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
 
-  const roomIdentifier = roomId || roomCode;
+  // refs for stable usage in handlers
+  const activeNotebookIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeNotebookIdRef.current = activeNotebookId;
+  }, [activeNotebookId]);
 
-  // Load notebooks from server
+  const updateBlockRef = useRef(updateBlock);
+  useEffect(() => {
+    updateBlockRef.current = updateBlock;
+  }, [updateBlock]);
+
+  // bind-once flag so we don’t double-attach listeners
+  const listenersBoundRef = useRef(false);
+
+  /* ---------- REST loader (uses JWT inside service now) ---------- */
   const loadNotebooks = useCallback(async () => {
-    if (!isConnected) return;
-
     try {
       setIsLoadingNotebooks(true);
-      const notebookList = await socketCollaborationService.getNotebooks();
-      setNotebooks(notebookList);
-
-      // Auto-select first notebook if none selected
-      if (notebookList.length > 0 && !activeNotebookId) {
-        setActiveNotebookId(notebookList[0].id);
+      const list = await socketCollaborationService.getNotebooks();
+      setNotebooks(list);
+      if (list.length && !activeNotebookIdRef.current) {
+        setActiveNotebookId(list[0].id);
       }
-    } catch (error) {
-      console.error("Failed to load notebooks:", error);
+    } catch (err) {
+      console.error("Failed to load notebooks:", err);
       setConnectionError("Failed to load notebooks");
     } finally {
       setIsLoadingNotebooks(false);
     }
-  }, [isConnected, activeNotebookId]);
+  }, []);
 
-  // Initialize collaboration service
-  useEffect(() => {
-    if (!roomIdentifier || !session?.access_token) {
-      return;
+  /* ---------- stable socket handlers ---------- */
+  const handleNotebookHistory = useCallback(
+    (data: { roomId: string; notebooks: NotebookInfo[] }) => {
+      // initial snapshot pushed by server on join
+      setNotebooks(data.notebooks || []);
+      if (data.notebooks?.length && !activeNotebookIdRef.current) {
+        setActiveNotebookId(data.notebooks[0].id);
+      }
+    },
+    []
+  );
+
+  const handleNotebookCreated = useCallback(
+    (data: { notebook: NotebookInfo }) => {
+      setNotebooks((prev) => upsertNotebook(prev, data.notebook));
+    },
+    []
+  );
+
+  const handleNotebookUpdated = useCallback(
+    (data: { notebook: NotebookInfo }) => {
+      setNotebooks((prev) => upsertNotebook(prev, data.notebook));
+    },
+    []
+  );
+
+  const handleNotebookDeleted = useCallback((data: { notebookId: string }) => {
+    setNotebooks((prev) => prev.filter((nb) => nb.id !== data.notebookId));
+    setActiveNotebookId((id) => (id === data.notebookId ? null : id));
+  }, []);
+
+  const handleCodeChanged = useCallback((data: CodeChangeData) => {
+    if (data.blockId && data.notebookId === activeNotebookIdRef.current) {
+      updateBlockRef.current(data.blockId, {
+        content: data.content,
+        updatedAt: Date.now(),
+      });
     }
+  }, []);
 
-    const initCollaboration = async () => {
+  const handleCursorMoved = useCallback((data: UserPresence) => {
+    setActiveUsers((prev) => {
+      const filtered = prev.filter((u) => u.userId !== data.userId);
+      return [...filtered, data];
+    });
+  }, []);
+
+  const handleTypingStart = useCallback((data: UserPresence) => {
+    setActiveUsers((prev) => {
+      const updated = prev.map((u) =>
+        u.userId === data.userId
+          ? { ...u, isTyping: true, position: data.position }
+          : u
+      );
+      if (!updated.find((u) => u.userId === data.userId)) {
+        updated.push({ ...data, isTyping: true });
+      }
+      return updated;
+    });
+  }, []);
+
+  const handleTypingStop = useCallback((data: { userId: string }) => {
+    setActiveUsers((prev) =>
+      prev.map((u) =>
+        u.userId === data.userId ? { ...u, isTyping: false } : u
+      )
+    );
+  }, []);
+
+  const handleError = useCallback((error: { message?: string }) => {
+    console.error("Collaboration error:", error);
+    setConnectionError(error.message || "Unknown collaboration error");
+  }, []);
+
+  /* ---------- connect -> bind listeners -> join -> load ---------- */
+  useEffect(() => {
+    if (!roomIdentifier || !session?.access_token) return;
+
+    let cancelled = false;
+
+    (async () => {
       try {
         setConnectionError(null);
 
-        // Connect to collaboration service
+        // 1) connect socket
         await socketCollaborationService.connect(
           roomIdentifier,
           session.access_token
         );
+
+        // 2) bind listeners BEFORE join to avoid missing early notebook-history/notebook:created
+        if (!listenersBoundRef.current) {
+          socketCollaborationService.on(
+            "notebook-history",
+            handleNotebookHistory
+          );
+          socketCollaborationService.on(
+            "notebook:created",
+            handleNotebookCreated
+          );
+          socketCollaborationService.on(
+            "notebook:updated",
+            handleNotebookUpdated
+          );
+          socketCollaborationService.on(
+            "notebook:deleted",
+            handleNotebookDeleted
+          );
+          socketCollaborationService.on("code-changed", handleCodeChanged);
+          socketCollaborationService.on("cursor-moved", handleCursorMoved);
+          socketCollaborationService.on("typing-start", handleTypingStart);
+          socketCollaborationService.on("typing-stop", handleTypingStop);
+          socketCollaborationService.on("error", handleError);
+          listenersBoundRef.current = true;
+        }
+
+        // 3) join room (server will emit notebook-history; if room empty,
+        //    it will create default and emit notebook:created)
+        await socketCollaborationService.joinRoom(roomIdentifier);
+
+        if (cancelled) return;
+
+        // 4) mark connected now that we’re in the room
         setIsConnected(true);
 
-        console.log("✅ Collaboration service initialized");
-      } catch (error) {
-        console.error("❌ Failed to initialize collaboration:", error);
-        setConnectionError(
-          error instanceof Error ? error.message : "Connection failed"
-        );
-        setIsConnected(false);
+        // 5) REST fallback (auth header now included in service)
+        //    If socket push didn’t arrive yet, this ensures the list appears.
+        await loadNotebooks();
+      } catch (err) {
+        console.error("❌ Collaboration init failed:", err);
+        if (!cancelled) {
+          setConnectionError(
+            err instanceof Error ? err.message : "Connection failed"
+          );
+          setIsConnected(false);
+        }
       }
-    };
-
-    initCollaboration();
+    })();
 
     return () => {
+      cancelled = true;
+
+      // unbind listeners
+      if (listenersBoundRef.current) {
+        socketCollaborationService.off(
+          "notebook-history",
+          handleNotebookHistory
+        );
+        socketCollaborationService.off(
+          "notebook:created",
+          handleNotebookCreated
+        );
+        socketCollaborationService.off(
+          "notebook:updated",
+          handleNotebookUpdated
+        );
+        socketCollaborationService.off(
+          "notebook:deleted",
+          handleNotebookDeleted
+        );
+        socketCollaborationService.off("code-changed", handleCodeChanged);
+        socketCollaborationService.off("cursor-moved", handleCursorMoved);
+        socketCollaborationService.off("typing-start", handleTypingStart);
+        socketCollaborationService.off("typing-stop", handleTypingStop);
+        socketCollaborationService.off("error", handleError);
+        listenersBoundRef.current = false;
+      }
+
       socketCollaborationService.disconnect();
       setIsConnected(false);
     };
-  }, [roomIdentifier, session?.access_token]);
+  }, [
+    roomIdentifier,
+    session?.access_token,
+    handleNotebookHistory,
+    handleNotebookCreated,
+    handleNotebookUpdated,
+    handleNotebookDeleted,
+    handleCodeChanged,
+    handleCursorMoved,
+    handleTypingStart,
+    handleTypingStop,
+    handleError,
+    loadNotebooks,
+  ]);
 
-  // Load notebooks when connected
-  useEffect(() => {
-    if (isConnected) {
-      loadNotebooks();
+  /* ---------- CRUD methods ---------- */
+
+  const createNotebook = useCallback(async (title: string) => {
+    if (!socketCollaborationService.isConnected()) {
+      throw new Error("Not connected to collaboration service");
     }
-  }, [isConnected, loadNotebooks]);
+    try {
+      setIsCreatingNotebook(true);
+      const nb = await socketCollaborationService.createNotebook(title);
+      // optimistic: set active to what server returned
+      setActiveNotebookId(nb.id);
+      // server will broadcast notebook:created -> upsert will keep list consistent
+    } catch (error) {
+      console.error("Failed to create notebook:", error);
+      throw error;
+    } finally {
+      setIsCreatingNotebook(false);
+    }
+  }, []);
 
-  // Set up event listeners
-  useEffect(() => {
-    if (!isConnected) return;
-
-    const handleDisconnected = () => {
-      setIsConnected(false);
-      setConnectionError("Connection lost");
-    };
-
-    const handleNotebookCreated = (data: { notebook: NotebookInfo }) => {
-      setNotebooks((prev) => [...prev, data.notebook]);
-    };
-
-    const handleNotebookDeleted = (data: { notebookId: string }) => {
-      setNotebooks((prev) => prev.filter((nb) => nb.id !== data.notebookId));
-      if (activeNotebookId === data.notebookId) {
-        setActiveNotebookId(null);
-      }
-    };
-
-    const handleCodeChanged = (data: CodeChangeData) => {
-      if (data.blockId && data.notebookId === activeNotebookId) {
-        // Update the block content in local state
-        updateBlock(data.blockId, {
-          content: data.content,
-          updatedAt: Date.now(),
-        });
-      }
-    };
-
-    const handleCursorMoved = (data: UserPresence) => {
-      setActiveUsers((prev) => {
-        const filtered = prev.filter((u) => u.userId !== data.userId);
-        return [...filtered, data];
-      });
-    };
-
-    const handleTypingStart = (data: UserPresence) => {
-      setActiveUsers((prev) => {
-        const updated = prev.map((u) =>
-          u.userId === data.userId
-            ? { ...u, isTyping: true, position: data.position }
-            : u
-        );
-
-        // Add user if not exists
-        if (!updated.find((u) => u.userId === data.userId)) {
-          updated.push({ ...data, isTyping: true });
-        }
-
-        return updated;
-      });
-    };
-
-    const handleTypingStop = (data: { userId: string }) => {
-      setActiveUsers((prev) =>
-        prev.map((u) =>
-          u.userId === data.userId ? { ...u, isTyping: false } : u
-        )
-      );
-    };
-
-    const handleError = (error: { message?: string }) => {
-      console.error("Collaboration error:", error);
-      setConnectionError(error.message || "Unknown collaboration error");
-    };
-
-    // Register event listeners
-    socketCollaborationService.on("disconnected", handleDisconnected);
-    socketCollaborationService.on("notebook:created", handleNotebookCreated);
-    socketCollaborationService.on("notebook:deleted", handleNotebookDeleted);
-    socketCollaborationService.on("code-changed", handleCodeChanged);
-    socketCollaborationService.on("cursor-moved", handleCursorMoved);
-    socketCollaborationService.on("typing-start", handleTypingStart);
-    socketCollaborationService.on("typing-stop", handleTypingStop);
-    socketCollaborationService.on("error", handleError);
-
-    return () => {
-      socketCollaborationService.off("disconnected", handleDisconnected);
-      socketCollaborationService.off("notebook:created", handleNotebookCreated);
-      socketCollaborationService.off("notebook:deleted", handleNotebookDeleted);
-      socketCollaborationService.off("code-changed", handleCodeChanged);
-      socketCollaborationService.off("cursor-moved", handleCursorMoved);
-      socketCollaborationService.off("typing-start", handleTypingStart);
-      socketCollaborationService.off("typing-stop", handleTypingStop);
-      socketCollaborationService.off("error", handleError);
-    };
-  }, [isConnected, activeNotebookId, updateBlock]);
-
-  // Create new notebook
-  const createNotebook = useCallback(
-    async (title: string) => {
-      if (!isConnected) {
-        throw new Error("Not connected to collaboration service");
-      }
-
-      try {
-        setIsCreatingNotebook(true);
-        const notebook = await socketCollaborationService.createNotebook(title);
-        setNotebooks((prev) => [...prev, notebook]);
-        setActiveNotebookId(notebook.id);
-      } catch (error) {
-        console.error("Failed to create notebook:", error);
-        throw error;
-      } finally {
-        setIsCreatingNotebook(false);
-      }
-    },
-    [isConnected]
-  );
-
-  // Rename notebook
   const renameNotebook = useCallback(
     async (notebookId: string, title: string) => {
-      if (!isConnected) {
+      if (!socketCollaborationService.isConnected()) {
         throw new Error("Not connected to collaboration service");
       }
-
       try {
-        const updatedNotebook = await socketCollaborationService.renameNotebook(
+        const updated = await socketCollaborationService.renameNotebook(
           notebookId,
           title
         );
-        setNotebooks((prev) =>
-          prev.map((nb) => (nb.id === notebookId ? updatedNotebook : nb))
-        );
+        setNotebooks((prev) => upsertNotebook(prev, updated));
       } catch (error) {
         console.error("Failed to rename notebook:", error);
         throw error;
       }
     },
-    [isConnected]
+    []
   );
 
-  // Switch to different notebook
-  const switchNotebook = useCallback(
-    async (notebookId: string) => {
-      if (!isConnected) return;
+  const switchNotebook = useCallback(async (notebookId: string) => {
+    if (!socketCollaborationService.isConnected()) return;
 
-      try {
-        setActiveNotebookId(notebookId);
+    try {
+      setActiveNotebookId(notebookId);
+      const blockList = await socketCollaborationService.getBlocks(notebookId);
+      const convertedBlocks: Block[] = blockList.map((b) => ({
+        id: b.id,
+        lang: (b.language as Lang) || "python",
+        content: "",
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+        position: b.position,
+      }));
+      console.log("Loaded blocks for notebook:", notebookId, convertedBlocks);
+    } catch (error) {
+      console.error("Failed to switch notebook:", error);
+      setConnectionError("Failed to load notebook");
+    }
+  }, []);
 
-        // Load blocks for this notebook
-        const blockList = await socketCollaborationService.getBlocks(
-          notebookId
-        );
+  const deleteNotebook = useCallback(async (notebookId: string) => {
+    if (!socketCollaborationService.isConnected()) return;
+    try {
+      await socketCollaborationService.deleteNotebookREST(notebookId);
+      setNotebooks((prev) => prev.filter((nb) => nb.id !== notebookId));
+      setActiveNotebookId((id) => (id === notebookId ? null : id));
+    } catch (error) {
+      console.error("Failed to delete notebook:", error);
+      throw error;
+    }
+  }, []);
 
-        // Convert BlockInfo to Block format for the store
-        // Note: This is a simplified conversion - you may need to adjust based on your Block interface
-        const convertedBlocks: Block[] = blockList.map((blockInfo) => ({
-          id: blockInfo.id,
-          lang: (blockInfo.language as Lang) || "python",
-          content: "", // Will be loaded from YJS document
-          createdAt: blockInfo.createdAt,
-          updatedAt: blockInfo.updatedAt,
-          position: blockInfo.position,
-        }));
-
-        // Replace current blocks with notebook blocks
-        // Note: You might want to add a method to replace all blocks in your store
-        console.log("Loaded blocks for notebook:", notebookId, convertedBlocks);
-      } catch (error) {
-        console.error("Failed to switch notebook:", error);
-        setConnectionError("Failed to load notebook");
-      }
-    },
-    [isConnected]
-  );
-
-  // Delete notebook
-  const deleteNotebook = useCallback(
-    async (notebookId: string) => {
-      if (!isConnected) return;
-
-      try {
-        await socketCollaborationService.deleteNotebookREST(notebookId);
-
-        // Update local state
-        setNotebooks((prev) => prev.filter((nb) => nb.id !== notebookId));
-
-        // If deleted notebook was active, clear active notebook
-        if (activeNotebookId === notebookId) {
-          setActiveNotebookId(null);
-        }
-      } catch (error) {
-        console.error("Failed to delete notebook:", error);
-        throw error;
-      }
-    },
-    [isConnected, activeNotebookId]
-  );
-
-  // Send code changes
   const sendCodeChange = useCallback(
     (blockId: string, content: string, cursorPosition: CursorPosition) => {
-      if (!isConnected || !activeNotebookId) return;
+      const nbId = activeNotebookIdRef.current;
+      if (!socketCollaborationService.isConnected() || !nbId) return;
 
       socketCollaborationService.sendCodeChange({
         content,
         cursorPosition,
-        notebookId: activeNotebookId,
+        notebookId: nbId,
         blockId,
       });
     },
-    [isConnected, activeNotebookId]
+    []
   );
 
-  // Send cursor updates
   const sendCursorUpdate = useCallback(
     (blockId: string, position: CursorPosition) => {
-      if (!isConnected || !activeNotebookId) return;
+      const nbId = activeNotebookIdRef.current;
+      if (!socketCollaborationService.isConnected() || !nbId) return;
 
-      socketCollaborationService.sendCursorMove(
-        position,
-        activeNotebookId,
-        blockId
-      );
+      socketCollaborationService.sendCursorMove(position, nbId, blockId);
     },
-    [isConnected, activeNotebookId]
+    []
   );
 
   const value: CollaborationContextType = {

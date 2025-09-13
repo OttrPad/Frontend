@@ -19,7 +19,6 @@ export function RoomManager() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [roomCode, setRoomCode] = useState("");
-  const [userId, setUserId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
   const [rooms, setRooms] = useState<ExtendedRoom[]>([]);
@@ -273,8 +272,7 @@ export function RoomManager() {
           {/* Tab Headers */}
           <div className="flex mb-8">
             <button
-              onClick={() =>  setActiveTab("join") }
-              
+              onClick={() => setActiveTab("join")}
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-l-xl transition-all duration-200 ${
                 activeTab === "join"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
@@ -299,8 +297,7 @@ export function RoomManager() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab("create") }
-              
+              onClick={() => setActiveTab("create")}
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-r-xl transition-all duration-200 ${
                 activeTab === "create"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
