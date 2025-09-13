@@ -1,8 +1,11 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Editor, type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import * as Y from "yjs";
+import { MonacoBinding } from "y-monaco";
 import type { Block, Lang } from "../../types/workspace";
 import { useAppStore } from "../../store/workspace";
+import { socketCollaborationService } from "../../lib/socketCollaborationService";
 
 interface ModelInfo {
   model: editor.ITextModel;
@@ -20,24 +23,21 @@ const getMonacoLanguage = (lang: Lang): string => {
 };
 
 const PERFORMANCE_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
-  // Disable expensive features by default
   minimap: { enabled: false },
   codeLens: false,
   occurrencesHighlight: "off",
   renderWhitespace: "none",
   renderLineHighlight: "none",
-  wordWrap: "on", // Enable word wrap to prevent horizontal scrolling
+  wordWrap: "on",
   bracketPairColorization: { enabled: false },
   matchBrackets: "near",
-  automaticLayout: true, // Enable automatic layout for dynamic height
-
-  // Keep essential features
+  automaticLayout: true,
   scrollBeyondLastLine: false,
   fontSize: 14,
   lineHeight: 20,
   fontFamily: "JetBrains Mono, Fira Code, Monaco, monospace",
   lineNumbers: "on",
-  folding: false, // Disable for performance
+  folding: false,
   readOnly: false,
   selectOnLineNumbers: true,
   roundedSelection: false,
@@ -53,8 +53,8 @@ const PERFORMANCE_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   formatOnPaste: true,
   formatOnType: true,
   scrollbar: {
-    vertical: "auto", // Allow vertical scrollbar if needed
-    horizontal: "hidden", // Hide horizontal scrollbar with word wrap
+    vertical: "auto",
+    horizontal: "hidden",
     verticalHasArrows: false,
     horizontalHasArrows: false,
     verticalScrollbarSize: 8,
@@ -67,11 +67,8 @@ class MonacoModelManager {
   private monaco: Monaco | null = null;
   private models = new Map<string, ModelInfo>();
   private disposables: { dispose(): void }[] = [];
-
-  // Constants for memory management
   private static readonly MAX_CACHED_MODELS = 50;
-  private static readonly CLEANUP_INTERVAL = 30000; // 30 seconds
-
+  private static readonly CLEANUP_INTERVAL = 30000;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(monaco: Monaco) {
@@ -86,15 +83,11 @@ class MonacoModelManager {
   }
 
   private cleanupOldModels() {
-    if (this.models.size <= MonacoModelManager.MAX_CACHED_MODELS) {
-      return;
-    }
+    if (this.models.size <= MonacoModelManager.MAX_CACHED_MODELS) return;
 
-    // Sort by last accessed time and remove old models
     const sortedModels = Array.from(this.models.entries()).sort(
       ([, a], [, b]) => a.lastAccessed - b.lastAccessed
     );
-
     const modelsToRemove = sortedModels.slice(
       0,
       this.models.size - MonacoModelManager.MAX_CACHED_MODELS
@@ -118,10 +111,7 @@ class MonacoModelManager {
     const existingModel = this.models.get(blockId);
 
     if (existingModel) {
-      // Update last accessed time
       existingModel.lastAccessed = Date.now();
-
-      // Update language if changed
       if (existingModel.language !== language && this.monaco) {
         this.monaco.editor.setModelLanguage(
           existingModel.model,
@@ -129,19 +119,13 @@ class MonacoModelManager {
         );
         existingModel.language = language;
       }
-
-      // Update content if different
       if (existingModel.model.getValue() !== content) {
         existingModel.model.setValue(content);
       }
-
       return existingModel.model;
     }
 
-    // Create new model
-    if (!this.monaco) {
-      throw new Error("Monaco not initialized");
-    }
+    if (!this.monaco) throw new Error("Monaco not initialized");
 
     const uri = this.monaco.Uri.parse(
       `inmemory://block-${blockId}.${this.getFileExtension(language)}`
@@ -159,7 +143,6 @@ class MonacoModelManager {
     };
 
     this.models.set(blockId, modelInfo);
-
     return model;
   }
 
@@ -193,17 +176,10 @@ class MonacoModelManager {
   }
 
   dispose() {
-    // Dispose all models
-    this.models.forEach((modelInfo) => {
-      modelInfo.model.dispose();
-    });
+    this.models.forEach((modelInfo) => modelInfo.model.dispose());
     this.models.clear();
-
-    // Dispose all disposables
-    this.disposables.forEach((disposable) => disposable.dispose());
+    this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
-
-    // Clear cleanup timer
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
@@ -221,6 +197,7 @@ class MonacoModelManager {
 
 interface SharedMonacoEditorProps {
   focusedBlockId: string | null;
+  notebookId?: string | null; // <<< NEW (required for Yjs)
   blocks: Block[];
   onContentChange: (blockId: string, content: string) => void;
   onMonacoInit?: (monaco: Monaco) => void;
@@ -230,6 +207,7 @@ interface SharedMonacoEditorProps {
 
 export function SharedMonacoEditor({
   focusedBlockId,
+  notebookId, // <<< NEW
   blocks,
   onContentChange,
   onMonacoInit,
@@ -246,19 +224,26 @@ export function SharedMonacoEditor({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const currentContentListenerRef = useRef<{ dispose(): void } | null>(null);
 
+  // Keep current binding so we can dispose when switching blocks/notebooks
+  const bindingRef = useRef<MonacoBinding | null>(null);
+
+  // Ensure Y.Doc exists for this notebook
+  useEffect(() => {
+    if (!notebookId) return;
+    let ydoc = socketCollaborationService.getYjsDocument(notebookId);
+    if (!ydoc) {
+      ydoc = socketCollaborationService.setupYjsDocument(notebookId);
+    }
+  }, [notebookId]);
+
   // Initialize Monaco and themes
   const handleEditorDidMount = useCallback(
     (editorInstance: editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
       setMonaco(monacoInstance);
       setEditor(editorInstance);
-
-      // Notify parent about Monaco initialization
       onMonacoInit?.(monacoInstance);
-
-      // Initialize model manager
       modelManagerRef.current = new MonacoModelManager(monacoInstance);
 
-      // Configure themes (same as original MonacoEditor)
       monacoInstance.editor.defineTheme("ottrpad-dark", {
         base: "vs-dark",
         inherit: true,
@@ -324,11 +309,10 @@ export function SharedMonacoEditor({
         },
       });
 
-      // Set initial theme
-      const selectedTheme = theme === "dark" ? "ottrpad-dark" : "ottrpad-light";
-      monacoInstance.editor.setTheme(selectedTheme);
+      monacoInstance.editor.setTheme(
+        theme === "dark" ? "ottrpad-dark" : "ottrpad-light"
+      );
 
-      // Setup ResizeObserver for manual layout
       if (editorContainerRef.current) {
         resizeObserverRef.current = new ResizeObserver(() => {
           editorInstance.layout();
@@ -336,7 +320,6 @@ export function SharedMonacoEditor({
         resizeObserverRef.current.observe(editorContainerRef.current);
       }
 
-      // Add Python completions if needed
       monacoInstance.languages.registerCompletionItemProvider("python", {
         provideCompletionItems: (model, position) => {
           const word = model.getWordUntilPosition(position);
@@ -346,7 +329,6 @@ export function SharedMonacoEditor({
             startColumn: word.startColumn,
             endColumn: word.endColumn,
           };
-
           return {
             suggestions: [
               {
@@ -377,85 +359,118 @@ export function SharedMonacoEditor({
     [theme, onMonacoInit]
   );
 
-  // Update theme when it changes
+  // Update theme on change
   useEffect(() => {
     if (monaco && editor) {
-      const selectedTheme = theme === "dark" ? "ottrpad-dark" : "ottrpad-light";
-      monaco.editor.setTheme(selectedTheme);
+      monaco.editor.setTheme(
+        theme === "dark" ? "ottrpad-dark" : "ottrpad-light"
+      );
       editor.layout();
     }
   }, [theme, monaco, editor]);
 
-  // Handle focused block changes
+  // Switch editor model when focused block changes (keeps your shared editor UX)
   useEffect(() => {
-    if (!focusedBlockId || !editor || !modelManagerRef.current || !monaco) {
+    if (!focusedBlockId || !editor || !modelManagerRef.current || !monaco)
       return;
-    }
 
     const block = blocks.find((b) => b.id === focusedBlockId);
     if (!block) return;
 
     try {
-      // Dispose previous content listener
+      // stop previous model -> store sync listener
       if (currentContentListenerRef.current) {
         currentContentListenerRef.current.dispose();
         currentContentListenerRef.current = null;
       }
 
-      // Get or create model for the focused block
+      // get / create a model for this block (local cache)
       const model = modelManagerRef.current.getOrCreateModel(
         block.id,
         block.content,
         block.lang
       );
 
-      // Set the model on the editor
       editor.setModel(model);
-
-      // Reset scroll position to top
       editor.setScrollTop(0);
       editor.revealLine(1);
 
-      // Setup content change listener
+      // keep store in sync for previews
       currentContentListenerRef.current = model.onDidChangeContent(() => {
         const content = model.getValue();
         onContentChange(focusedBlockId, content);
       });
 
-      // Focus the editor
       editor.focus();
     } catch (error) {
       console.error("Error switching editor model:", error);
     }
   }, [focusedBlockId, blocks, editor, monaco, onContentChange]);
 
+  // Yjs <-> Monaco binding for the focused block
+  useEffect(() => {
+    if (!focusedBlockId || !notebookId || !editor) return;
+
+    // Ensure doc exists
+    const ydoc =
+      socketCollaborationService.getYjsDocument(notebookId) ||
+      socketCollaborationService.setupYjsDocument(notebookId);
+
+    if (!ydoc) return;
+
+    // Block content map
+    const blockContent = ydoc.getMap<Y.Text>("blockContent");
+
+    // Ensure Y.Text exists for this block
+    let ytext = blockContent.get(focusedBlockId);
+    if (!ytext) {
+      ytext = new Y.Text();
+      blockContent.set(focusedBlockId, ytext);
+    }
+
+    // Bind Y.Text <-> current Monaco model
+    const model = editor.getModel();
+    if (!model) return;
+
+    // Dispose previous binding first
+    bindingRef.current?.destroy();
+    bindingRef.current = null;
+
+    bindingRef.current = new MonacoBinding(
+      ytext,
+      model,
+      new Set([editor]),
+      null
+    );
+
+    // Seed store once (so previews render content from Yjs)
+    onContentChange(focusedBlockId, ytext.toString());
+
+    return () => {
+      bindingRef.current?.destroy();
+      bindingRef.current = null;
+    };
+  }, [focusedBlockId, notebookId, editor, onContentChange]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (currentContentListenerRef.current) {
-        currentContentListenerRef.current.dispose();
-      }
-      if (modelManagerRef.current) {
-        modelManagerRef.current.dispose();
-      }
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-      }
+      currentContentListenerRef.current?.dispose();
+      modelManagerRef.current?.dispose();
+      resizeObserverRef.current?.disconnect();
+      bindingRef.current?.destroy();
     };
   }, []);
 
-  // Update model content when block content changes externally
+  // Keep models in sync if external block content changes (e.g., Yjs updates updating store)
   useEffect(() => {
     if (!modelManagerRef.current) return;
-
     blocks.forEach((block) => {
       modelManagerRef.current?.updateModelContent(block.id, block.content);
     });
   }, [blocks]);
 
-  if (!focusedBlockId) {
-    return null;
-  }
+  if (!focusedBlockId) return null;
 
   return (
     <div
@@ -465,14 +480,14 @@ export function SharedMonacoEditor({
     >
       <Editor
         height={height}
-        language="python" // This will be managed by the model
-        value="" // Content is managed by the model
+        language="python" // actual language comes from the bound model
+        value="" // content managed by the bound model
         onMount={handleEditorDidMount}
         options={PERFORMANCE_OPTIONS}
         theme={theme === "dark" ? "ottrpad-dark" : "ottrpad-light"}
         loading={
           <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400" />
           </div>
         }
       />
@@ -480,5 +495,4 @@ export function SharedMonacoEditor({
   );
 }
 
-// Export the model manager for external access if needed
 export { MonacoModelManager };
