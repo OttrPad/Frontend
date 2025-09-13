@@ -1,7 +1,9 @@
 import supabase from "./supabaseClient";
 import { apiUrl } from "./constants";
 
-const API_BASE_URL = apiUrl;
+
+const API_BASE_URL = apiUrl
+
 
 // Types for API responses
 export interface Room {
@@ -90,7 +92,9 @@ class ApiClient {
       ...options,
     };
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+
+  const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -361,6 +365,19 @@ class ApiClient {
     };
   }> {
     return this.request("/api/users/profile");
+  }
+
+  // AI generation method
+  async generateAiContent(prompt: string, options: Record<string, unknown> = {}): Promise<{
+    prompt: string;
+    texts: string[];
+    images: unknown[];
+    cached: boolean;
+  }> {
+    return this.request(`/api/ai/chat`, {
+      method: "POST",
+      body: JSON.stringify({ prompt, options }),
+    });
   }
 }
 
