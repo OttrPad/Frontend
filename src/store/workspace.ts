@@ -90,7 +90,7 @@ interface AIState {
   isLoading: boolean;
   addMessage: (message: Omit<AIMessage, "id" | "timestamp">) => void;
   clearMessages: () => void;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string) => Promise<void>;
 }
 
 // Chat Store
@@ -563,10 +563,29 @@ export const useAIStore = create<AIState>()(
       isLoading: false,
 
       addMessage: (message) => {
+        // Translate some provider messages into helpful guidance for the user
+        const translateProviderMessage = (text: string) => {
+          if (!text) return text;
+          const t = String(text);
+          if (t.includes("Direct access to Core service is not allowed") || t.includes("Core service is not allowed")) {
+            return (
+              "AI provider rejected the request: Direct access to Core service is not allowed. " +
+              "Check server-side AI configuration (GEMINI_API_KEY / credentials) and gateway routing."
+            );
+          }
+          if (t.toLowerCase().includes("bearer token") || t.toLowerCase().includes("provide a valid bearer") || t.toLowerCase().includes("invalid bearer")) {
+            return (
+              "AI request failed: Missing or invalid Bearer token. Ensure your server sets GEMINI_API_KEY and forwards an Authorization: Bearer <token> header to the AI gateway."
+            );
+          }
+          return text;
+        };
+
         const newMessage: AIMessage = {
           ...message,
           id: uuidv4(),
           timestamp: Date.now(),
+          content: message.role === "assistant" ? translateProviderMessage(message.content) : message.content,
         };
 
         set((state) => ({
@@ -578,40 +597,66 @@ export const useAIStore = create<AIState>()(
         set({ messages: [] });
       },
 
-      sendMessage: (content) => {
+      sendMessage: async (content) => {
+        // optimistic add user message
         get().addMessage({ role: "user", content });
-
         set({ isLoading: true });
 
-        // Mock AI response
-        setTimeout(() => {
-          const responses = [
-            "I can help you with that! Here's a code suggestion:",
-            "Let me analyze your code and provide some improvements:",
-            "Based on your request, here's what I recommend:",
-            "Great question! Here's how you can implement that:",
-          ];
+        const mod = await import("../lib/apiClient");
+        const apiClient = mod.apiClient;
 
-          const randomResponse =
-            responses[Math.floor(Math.random() * responses.length)];
+        const maxAttempts = 3;
+        const delays = [1000, 2000, 4000]; // ms
+        let attempt = 0;
+        let lastError: unknown = null;
 
-          get().addMessage({
-            role: "assistant",
-            content: randomResponse,
-            actions: [
-              {
-                type: "insert_block",
-                data: {
-                  lang: "python",
-                  content:
-                    '# AI suggested code\nprint("This is an AI suggestion")',
-                },
-              },
-            ],
-          });
+  // Provide a transient retry hint message which we'll add between attempts
+  const addRetryHint = (msg: string) => get().addMessage({ role: "assistant", content: msg });
 
-          set({ isLoading: false });
-        }, 1500);
+        while (attempt < maxAttempts) {
+          try {
+            attempt += 1;
+            if (attempt > 1) {
+              addRetryHint(`Retrying AI request (attempt ${attempt}/${maxAttempts})...`);
+            }
+
+            const payload = await apiClient.generateAiContent(content);
+            const texts: string[] = Array.isArray(payload?.texts) ? payload.texts : [String(payload)];
+            for (const t of texts) {
+              get().addMessage({ role: "assistant", content: t });
+            }
+
+            // success
+            lastError = null;
+            break;
+          } catch (err) {
+            console.warn(`AI attempt ${attempt} failed`, err);
+            lastError = err;
+
+            // If it's a client/validation error or rate-limit, don't retry
+            const e = err as unknown as { statusCode?: number };
+            const status = e?.statusCode ?? (err && typeof err === "object" && (err as Error).message ? undefined : undefined);
+            // Retry only on server-side 5xx
+            const isServerError = typeof status === "number" ? status >= 500 && status < 600 : true;
+
+            if (attempt >= maxAttempts || !isServerError) {
+              break;
+            }
+
+            // wait before next attempt
+            const delay = delays[Math.min(attempt - 1, delays.length - 1)];
+            await new Promise((r) => setTimeout(r, delay));
+          }
+        }
+
+        if (lastError) {
+          console.error("AI request failed after retries", lastError);
+          const e = lastError as unknown as { statusCode?: number; message?: string };
+          const msg = e?.message || String(lastError);
+          get().addMessage({ role: "assistant", content: `AI request failed after ${maxAttempts} attempts: ${msg}. Try again later.` });
+        }
+
+        set({ isLoading: false });
       },
     }),
     { name: "ai-store" }
@@ -634,6 +679,8 @@ socket.on("connect_error", (error: Error) => {
     // window.location.href = "/login";
   }
 });
+
+
 
 // Message from server
 socket.on("message", (message: unknown) => {
@@ -664,7 +711,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
       }
       return null;
     })
-    .filter(Boolean);
+    .filter(Boolean); //removes any null values (so only valid message objects remain) 
 
   // Replace existing messages for this room with history
   const chatStore = useChatStore.getState();
@@ -679,7 +726,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
 // Chat errors from server
 socket.on("chat:error", (error: { message: string }) => {
   console.error("Chat error:", error.message);
-  // You might want to show a toast notification here
+ 
   // toast.error(error.message);
 });
 
@@ -834,37 +881,43 @@ export const useAppStore = create<AppState>()(
       },
 
       setCurrentRoom: (roomId) => {
-        set((state) => {
-          const prev = state.currentRoom;
-          // Leave previous room if any
-          if (prev && prev !== roomId && socket.connected) {
-            socket.emit("join-room", { roomId: prev }); // Note: No leave event in new API, just join new room
-          }
-          return { currentRoom: roomId };
-        });
-        // After state update, ensure socket connected then join new room
+        // Normalize and set currentRoom synchronously
+        const normalized = roomId == null ? null : String(roomId);
+  set({ currentRoom: normalized });
+
+        // Perform socket lifecycle actions asynchronously
         queueMicrotask(async () => {
           try {
-            // lazy import supabase client to avoid circular dependency issues
-            const mod = await import("../lib/supabaseClient");
-            const supabase = mod.default;
+            const supMod = await import("../lib/supabaseClient");
+            const supabase = supMod.default;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            if (token) {
-              // dynamic import to avoid re-import ordering issues
-              const sockMod = await import("../lib/socket");
-              const s = sockMod.socket;
-              // Socket.IO client instance lacks typed auth extension; cast minimally
-              (
-                s as unknown as {
-                  auth: Record<string, unknown>;
-                  connect: () => void;
-                }
-              ).auth = { token };
-              if (!s.connected) s.connect();
-              s.emit("join-room", { roomId });
-              // Request chat history after joining
-              s.emit("request-chat-history", { roomId });
+
+            if (!token) return;
+
+            // Use centralized connect helper from lib/socket
+            const sockHelpers = await import("../lib/socket");
+            const { connectSocketWithToken, socket: s } = sockHelpers;
+            await connectSocketWithToken(token);
+
+            const sockAny = s as unknown as { __lastJoinedRoom?: string | null; emit: (...args: unknown[]) => void };
+            const prev = sockAny.__lastJoinedRoom ?? null;
+            const next = normalized;
+
+            // If there's a previous different room, explicitly leave it if server supports it
+            if (prev && prev !== next) {
+              try {
+                sockAny.emit("leave-room", { roomId: prev });
+              } catch {
+                // ignore
+              }
+            }
+
+            // Only emit join if we're not already in the same room
+            if (next && prev !== next) {
+              sockAny.__lastJoinedRoom = next;
+              sockAny.emit("join-room", { roomId: next });
+              // s.emit("request-chat-history", { roomId: next });
             }
           } catch (e) {
             console.warn("Room join socket setup failed", e);

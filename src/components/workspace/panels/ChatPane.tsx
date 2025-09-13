@@ -1,6 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { connectSocketWithToken } from "../../../lib/socket";
-import supabase from "../../../lib/supabaseClient";
 import { useAppStore, useChatStore } from "../../../store/workspace";
 import { useAuth } from "../../../hooks/useAuth";
 import { Button } from "../../ui/button";
@@ -21,43 +19,9 @@ export function ChatPane() {
   const roomId = currentRoom || "global";
   const roomMessages = useMemo(() => messages[String(roomId)] ?? [], [messages, roomId]);
 
-  // --- JWT Auth Socket.IO Connect (keep or undo as needed) ---
-  useEffect(() => {
-    async function connectWithJWT() {
-      if (!user) return;
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        await connectSocketWithToken(token);
-      }
-    }
-    connectWithJWT();
-  }, [user]);
-  // --- End JWT Auth Socket.IO Connect ---
+  
 
-  // Ensure the socket joins the selected room before sending messages
-  // useEffect(() => {
-  //   let active = true;
-  //   (async () => {
-  //     if (!user || !roomId) return;
-  //     // Make sure we're authenticated and connected before joining
-  //     const { data } = await supabase.auth.getSession();
-  //     const token = data.session?.access_token;
-  //     if (token) {
-  //       await connectSocketWithToken(token);
-  //     }
-  //     if (active) {
-  //       socket.emit("joinRoom", { roomId });
-  //     }
-  //   })();
 
-  //   return () => {
-  //     active = false;
-  //     // if (roomId) {
-  //     //   socket.emit("leaveRoom", { roomId });
-  //     // }
-  //   };
-  // }, [roomId, user]);
 
   // Always jump to bottom when entering/switching rooms
   useEffect(() => {
@@ -118,11 +82,23 @@ export function ChatPane() {
         </div>
       </div>
 
-  <div id="chat-container" ref={listRef} className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-3">
-        {roomMessages.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No messages yet. Say hello!</div>
-        ) : (
-          roomMessages.map((msg, i) => {
+  <div id="chat-container" ref={listRef} className="flex-1 overflow-y-auto scrollbar-thin p-4">
+        <div className="min-h-full flex flex-col">
+          {/* Static pinned welcome caption */}
+          <div className="mb-4 mt-1 flex justify-center">
+            <div className="px-3 py-1 text-xs rounded-full border bg-orange-500/10 border-orange-400/30 text-orange-300 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]" role="note" aria-label="Welcome banner">
+              Welcome to the collaboration room!
+            </div>
+          </div>
+          {roomMessages.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center pb-24">
+              <div className="text-sm text-muted-foreground select-none">
+                No messages yet. <span className="text-orange-400">Say hello!</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+          {roomMessages.map((msg, i) => {
             const key = ("message_id" in msg && msg.message_id)
               ? String(msg.message_id)
               : `${msg.uid}-${msg.created_at}-${i}`;
@@ -165,8 +141,10 @@ export function ChatPane() {
                 </div>
               </div>
             );
-          })
-        )}
+          })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-shrink-0 p-4 border-t border-gray-700">
