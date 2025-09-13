@@ -224,14 +224,17 @@ export class SocketCollaborationService {
 
     // --- Block events
     this.socket.on("block:created", (data: any) => {
+      console.log("📦 Block created:", data);
       this.emit("block:created", data);
     });
 
     this.socket.on("block:deleted", (data: any) => {
+      console.log("🗑️ Block deleted:", data);
       this.emit("block:deleted", data);
     });
 
     this.socket.on("block:moved", (data: any) => {
+      console.log("↕️ Block moved:", data);
       this.emit("block:moved", data);
     });
 
