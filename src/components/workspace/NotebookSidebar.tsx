@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   MoreVertical,
@@ -10,7 +10,24 @@ import {
 import { Button } from "../ui/button";
 import { ContextMenu } from "./ContextMenu";
 import { RenameDialog } from "../modals/RenameDialog";
+import {
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "../ui/alert-dialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
+import { socketCollaborationService } from "../../lib/socketCollaborationService";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 export function NotebookSidebar() {
   const {
@@ -18,10 +35,14 @@ export function NotebookSidebar() {
     renameNotebook,
     deleteNotebook,
     isConnected,
+    isCreatingNotebook,
     notebooks,
     activeNotebookId,
     switchNotebook,
   } = useCollaboration();
+
+  // Treat UI as connected if either the context OR the socket says we are
+  const uiConnected = isConnected || socketCollaborationService.isConnected();
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -29,117 +50,79 @@ export function NotebookSidebar() {
     notebookId?: string;
     type: "notebook" | "empty";
   } | null>(null);
+
   const [renameDialog, setRenameDialog] = useState<{
     notebookId: string;
     currentName: string;
   } | null>(null);
-  const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
 
-  const handleNotebookContextMenu = (
-    e: React.MouseEvent,
-    notebookId: string
-  ) => {
-    e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      notebookId: notebookId,
-      type: "notebook",
-    });
-  };
+  const [deleteDialog, setDeleteDialog] = useState<{
+    notebookId: string;
+    notebookName: string;
+  } | null>(null);
 
+  useEffect(() => {
+    // helpful to see why the + button might be disabled
+    console.log(
+      "[Sidebar] isConnected(ctx):",
+      isConnected,
+      "isConnected(socket):",
+      socketCollaborationService.isConnected(),
+      "isCreatingNotebook:",
+      isCreatingNotebook
+    );
+  }, [isConnected, isCreatingNotebook]);
+
+  /* ---------- Right-click: empty area → “New Notebook” ---------- */
   const handleEmptySpaceContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      type: "empty",
-    });
+    setContextMenu({ x: e.clientX, y: e.clientY, type: "empty" });
   };
 
   const handleNewNotebook = useCallback(async () => {
-    if (!isConnected || isCreatingNotebook) {
-      console.error(
-        "Not connected to collaboration server or already creating"
-      );
-      return;
-    }
-
     const name = `Notebook ${Date.now()}`;
     try {
-      setIsCreatingNotebook(true);
       await createNotebook(name);
-    } catch (error) {
-      console.error("Failed to create notebook:", error);
+    } catch (err) {
+      console.error("Failed to create notebook:", err);
     } finally {
-      setIsCreatingNotebook(false);
+      setContextMenu(null);
     }
-    setContextMenu(null);
-  }, [isConnected, createNotebook, isCreatingNotebook]);
+  }, [createNotebook]);
 
+  /* ---------- Row actions (Rename/Delete) ---------- */
   const handleNotebookRename = (notebookId: string, currentName: string) => {
     setRenameDialog({ notebookId, currentName });
-    setContextMenu(null);
   };
 
-  const handleNotebookDelete = async (notebookId: string) => {
+  const handleNotebookDelete = (notebookId: string, notebookName: string) => {
+    setDeleteDialog({ notebookId, notebookName });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog) return;
     try {
-      await deleteNotebook(notebookId);
-    } catch (error) {
-      console.error("Failed to delete notebook:", error);
+      await deleteNotebook(deleteDialog.notebookId);
+    } catch (err) {
+      console.error("Failed to delete notebook:", err);
     }
-    setContextMenu(null);
+    setDeleteDialog(null);
   };
 
   const handleRenameConfirm = async (newName: string) => {
-    if (renameDialog) {
-      try {
-        await renameNotebook(renameDialog.notebookId, newName);
-      } catch (error) {
-        console.error("Failed to rename notebook:", error);
-      }
-      setRenameDialog(null);
+    if (!renameDialog) return;
+    try {
+      await renameNotebook(renameDialog.notebookId, newName);
+    } catch (err) {
+      console.error("Failed to rename notebook:", err);
     }
+    setRenameDialog(null);
   };
 
-  const getContextMenuItems = () => {
-    if (!contextMenu) return [];
-
-    if (contextMenu.type === "notebook" && contextMenu.notebookId) {
-      const notebook = notebooks.find((nb) => nb.id === contextMenu.notebookId);
-      return [
-        {
-          label: "Rename Notebook",
-          icon: Edit3,
-          onClick: () => {
-            if (notebook) {
-              handleNotebookRename(notebook.id, notebook.title);
-            }
-          },
-        },
-        { separator: true },
-        {
-          label: "Delete Notebook",
-          icon: Trash2,
-          onClick: () => {
-            if (notebook) {
-              handleNotebookDelete(notebook.id);
-            }
-          },
-          className: "text-red-400 hover:text-red-300",
-        },
-      ];
-    }
-
-    // Empty space context menu - just create new notebook
-    return [
-      {
-        label: "New Notebook",
-        icon: FileText,
-        onClick: () => handleNewNotebook(),
-      },
-    ];
-  };
+  /* ---------- ContextMenu items for EMPTY SPACE only ---------- */
+  const getEmptySpaceMenuItems = () => [
+    { label: "New Notebook", icon: FileText, onClick: handleNewNotebook },
+  ];
 
   return (
     <>
@@ -154,11 +137,11 @@ export function NotebookSidebar() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleNewNotebook()}
-                disabled={!isConnected || isCreatingNotebook}
+                onClick={handleNewNotebook}
+                disabled={!uiConnected || isCreatingNotebook}
                 className="h-6 w-6 p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent disabled:opacity-50"
                 title={
-                  !isConnected
+                  !uiConnected
                     ? "Not connected"
                     : isCreatingNotebook
                     ? "Creating notebook..."
@@ -181,35 +164,60 @@ export function NotebookSidebar() {
               {notebooks.map((notebook) => (
                 <div
                   key={notebook.id}
-                  className={`
-                    flex items-center px-3 py-2 rounded cursor-pointer text-sm group
+                  className={`flex items-center px-3 py-2 rounded text-sm group
                     ${
                       activeNotebookId === notebook.id
                         ? "bg-sidebar-accent text-sidebar-primary"
                         : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                    }
-                  `}
-                  onClick={() => switchNotebook(notebook.id)}
-                  onDoubleClick={() =>
-                    handleNotebookRename(notebook.id, notebook.title)
-                  }
-                  onContextMenu={(e) =>
-                    handleNotebookContextMenu(e, notebook.id)
-                  }
+                    }`}
                 >
-                  <BookOpen className="w-4 h-4 mr-3 flex-shrink-0" />
-                  <span className="flex-1 truncate">{notebook.title}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNotebookContextMenu(e, notebook.id);
-                    }}
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center text-left"
+                    onClick={() => switchNotebook(notebook.id)}
+                    onDoubleClick={() =>
+                      handleNotebookRename(notebook.id, notebook.title)
+                    }
                   >
-                    <MoreVertical className="w-3 h-3" />
-                  </Button>
+                    <BookOpen className="w-4 h-4 mr-3 flex-shrink-0" />
+                    <span className="flex-1 truncate">{notebook.title}</span>
+                  </button>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent opacity-60 group-hover:opacity-100"
+                        title="More options"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleNotebookRename(notebook.id, notebook.title);
+                        }}
+                      >
+                        <Edit3 className="mr-2 h-4 w-4" />
+                        <span>Rename Notebook</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-red-500 focus:text-red-500"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleNotebookDelete(notebook.id, notebook.title);
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Delete Notebook</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               ))}
             </div>
@@ -223,12 +231,12 @@ export function NotebookSidebar() {
         </div>
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
+      {/* Right-click Context Menu (empty space only) */}
+      {contextMenu && contextMenu.type === "empty" && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={getContextMenuItems()}
+          items={getEmptySpaceMenuItems()}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -241,6 +249,31 @@ export function NotebookSidebar() {
           onConfirm={handleRenameConfirm}
           onCancel={() => setRenameDialog(null)}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteDialog && (
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Notebook</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteDialog.notebookName}"?
+              This action cannot be undone and will permanently remove the
+              notebook and all its content.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteDialog(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       )}
     </>
   );

@@ -60,39 +60,54 @@ export class SocketCollaborationService {
       : "http://localhost:4000";
   }
 
-  private setupEventHandlers() {
-    // Initialize event handler maps
-    this.eventHandlers.set("connected", []);
-    this.eventHandlers.set("disconnected", []);
-    this.eventHandlers.set("notebook:created", []);
-    this.eventHandlers.set("notebook:deleted", []);
-    this.eventHandlers.set("code-changed", []);
-    this.eventHandlers.set("cursor-moved", []);
-    this.eventHandlers.set("selection-changed", []);
-    this.eventHandlers.set("typing-start", []);
-    this.eventHandlers.set("typing-stop", []);
-    this.eventHandlers.set("language-change", []);
-    this.eventHandlers.set("yjs-update", []);
-    this.eventHandlers.set("yjs-state", []);
-    this.eventHandlers.set("error", []);
+  private getSocketUrl(): string {
+    return process.env.NODE_ENV === "production"
+      ? "https://collab.ottrpad.com"
+      : "http://localhost:5002";
   }
 
-  // Connection management
+  private setupEventHandlers() {
+    [
+      // connection/room
+      "connected",
+      "disconnected",
+      "room-joined",
+      // notebooks
+      "notebook-history",
+      "notebook:created",
+      "notebook:updated",
+      "notebook:deleted",
+      // blocks
+      "block:created",
+      "block:deleted",
+      "block:moved",
+      // realtime collab
+      "code-changed",
+      "cursor-moved",
+      "selection-changed",
+      "typing-start",
+      "typing-stop",
+      "language-change",
+      // yjs
+      "yjs-update",
+      "yjs-state",
+      // errors
+      "error",
+    ].forEach((evt) => this.eventHandlers.set(evt, []));
+  }
+
+  /* ===========================
+     Connection & Room join
+     =========================== */
+
   async connect(roomId: string, token: string): Promise<void> {
     this.roomId = roomId;
     this.token = token;
 
-    // Socket.IO connection URL (different from REST API)
-    const socketUrl =
-      process.env.NODE_ENV === "production"
-        ? "https://collab.ottrpad.com"
-        : "http://localhost:5002";
+    if (this.socket?.connected) return;
 
-    this.socket = io(socketUrl, {
-      auth: {
-        token: token,
-        roomId: roomId,
-      },
+    this.socket = io(this.getSocketUrl(), {
+      auth: { token }, // room join is a separate step
       transports: ["websocket", "polling"],
     });
 
@@ -102,25 +117,71 @@ export class SocketCollaborationService {
         return;
       }
 
-      this.socket.on("connect", () => {
-        console.log("✅ Socket.IO connected to collaboration server");
+      this.socket.once("connect", () => {
+        console.log("✅ Socket.IO connected");
         this.emit("connected");
+        // Listeners should be attached once connected
+        this.setupCollaborationListeners();
         resolve();
+      });
+
+      this.socket.once("connect_error", (error: any) => {
+        console.error("🚨 Socket.IO connection error:", error);
+        reject(error);
       });
 
       this.socket.on("disconnect", (reason: any) => {
         console.log("🔌 Socket.IO disconnected:", reason);
         this.emit("disconnected", reason);
       });
-
-      this.socket.on("connect_error", (error: any) => {
-        console.error("🚨 Socket.IO connection error:", error);
-        reject(error);
-      });
-
-      // Set up collaboration event listeners
-      this.setupCollaborationListeners();
     });
+  }
+
+  /**
+   * Join the collaboration room. Your server currently does not ack or emit "room-joined".
+   * We support ack/event if present, and otherwise resolve after a short delay so the UI can proceed.
+   */
+  async joinRoom(roomId: string): Promise<void> {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error("Socket not connected");
+    }
+    this.roomId = roomId;
+
+    const sock = this.socket;
+
+    // Try ack if server supports it
+    const ackPromise = new Promise<boolean>((resolve) => {
+      try {
+        sock.emit("join-room", { roomId }, (res?: { ok: boolean }) => {
+          resolve(!!res?.ok);
+        });
+      } catch {
+        resolve(false);
+      }
+    });
+
+    // Try event if server emits it
+    const evtPromise = new Promise<boolean>((resolve) => {
+      const handler = (data: any) => {
+        if (data?.roomId === roomId) {
+          sock.off("room-joined", handler);
+          resolve(true);
+        }
+      };
+      sock.on("room-joined", handler);
+      setTimeout(() => {
+        sock.off("room-joined", handler);
+        resolve(false);
+      }, 600);
+    });
+
+    const [ackOk, evtOk] = await Promise.all([ackPromise, evtPromise]);
+    if (!ackOk && !evtOk) {
+      // Fallback: give the server a brief moment to add us to the room
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    this.emit("room-joined", { roomId });
   }
 
   disconnect(): void {
@@ -134,29 +195,52 @@ export class SocketCollaborationService {
     this.token = null;
   }
 
+  /* ===========================
+     Socket listeners & emitters
+     =========================== */
+
   private setupCollaborationListeners(): void {
     if (!this.socket) return;
 
-    // Notebook management events
+    // --- Room / initial data
+    this.socket.on("notebook-history", (data: any) => {
+      // { roomId, notebooks }
+      this.emit("notebook-history", data);
+    });
+
+    // --- Notebook events
     this.socket.on("notebook:created", (data: any) => {
-      console.log("📓 New notebook created:", data.notebook);
       this.emit("notebook:created", data);
     });
 
+    this.socket.on("notebook:updated", (data: any) => {
+      this.emit("notebook:updated", data);
+    });
+
     this.socket.on("notebook:deleted", (data: any) => {
-      console.log("🗑️ Notebook deleted:", data.notebookId);
       this.notebooks.delete(data.notebookId);
       this.emit("notebook:deleted", data);
     });
 
-    // Code collaboration events
+    // --- Block events
+    this.socket.on("block:created", (data: any) => {
+      this.emit("block:created", data);
+    });
+
+    this.socket.on("block:deleted", (data: any) => {
+      this.emit("block:deleted", data);
+    });
+
+    this.socket.on("block:moved", (data: any) => {
+      this.emit("block:moved", data);
+    });
+
+    // --- Realtime collaboration events
     this.socket.on("code-changed", (data: any) => {
-      console.log("📝 Code changed by:", data.userEmail);
       this.emit("code-changed", data);
     });
 
     this.socket.on("cursor-moved", (data: any) => {
-      console.log("🖱️ Cursor moved by:", data.userEmail);
       this.activeUsers.set(data.userId, {
         userId: data.userId,
         userEmail: data.userEmail,
@@ -168,12 +252,10 @@ export class SocketCollaborationService {
     });
 
     this.socket.on("selection-changed", (data: any) => {
-      console.log("🔤 Selection changed by:", data.userEmail);
       this.emit("selection-changed", data);
     });
 
     this.socket.on("typing-start", (data: any) => {
-      console.log("⌨️ User started typing:", data.userEmail);
       const user: UserPresence = this.activeUsers.get(data.userId) || {
         userId: data.userId,
         userEmail: data.userEmail,
@@ -187,7 +269,6 @@ export class SocketCollaborationService {
     });
 
     this.socket.on("typing-stop", (data: any) => {
-      console.log("⏹️ User stopped typing:", data.userEmail);
       const user = this.activeUsers.get(data.userId);
       if (user) {
         user.isTyping = false;
@@ -197,11 +278,10 @@ export class SocketCollaborationService {
     });
 
     this.socket.on("language-change", (data: any) => {
-      console.log("🔧 Language changed to:", data.language);
       this.emit("language-change", data);
     });
 
-    // YJS events
+    // --- YJS events
     this.socket.on("yjs-update", (data: any) => {
       this.handleYjsUpdate(data);
     });
@@ -210,14 +290,12 @@ export class SocketCollaborationService {
       this.handleYjsState(data);
     });
 
-    // Error handling
+    // --- Errors
     this.socket.on("error", (error: any) => {
-      console.error("🚨 Collaboration error:", error);
       this.emit("error", error);
     });
   }
 
-  // Event handling
   on(event: string, handler: (data?: any) => void): void {
     const handlers = this.eventHandlers.get(event) || [];
     handlers.push(handler);
@@ -238,7 +316,34 @@ export class SocketCollaborationService {
     handlers.forEach((handler) => handler(data));
   }
 
-  // Notebook management
+  /* ===========================
+     REST (server broadcasts changes)
+     =========================== */
+
+  async getNotebooks(): Promise<NotebookInfo[]> {
+    if (!this.roomId || !this.token) {
+      throw new Error("Not connected to collaboration service");
+    }
+
+    const response = await fetch(
+      `${this.getApiBaseUrl()}/api/collaboration/rooms/${
+        this.roomId
+      }/notebooks`,
+      {
+        headers: {
+          Authorization: `Bearer ${this.token}`, // ✅ include JWT
+        },
+      }
+    );
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || "Failed to get notebooks");
+    }
+
+    return result.data;
+  }
+
   async createNotebook(title: string): Promise<NotebookInfo> {
     if (!this.roomId || !this.token) {
       throw new Error("Not connected to collaboration service");
@@ -263,22 +368,8 @@ export class SocketCollaborationService {
       throw new Error(result.error || "Failed to create notebook");
     }
 
-    return result.data;
-  }
-
-  async getNotebooks(): Promise<NotebookInfo[]> {
-    if (!this.roomId) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    const response = await fetch(
-      `${this.getApiBaseUrl()}/api/collaboration/rooms/${this.roomId}/notebooks`
-    );
-    const result = await response.json();
-
-    if (!result.success) {
-      throw new Error(result.error || "Failed to get notebooks");
-    }
+    // IMPORTANT: Do NOT emit "notebook:create" here.
+    // The REST endpoint already broadcasts "notebook:created" to the room.
 
     return result.data;
   }
@@ -332,18 +423,23 @@ export class SocketCollaborationService {
     }
   }
 
-  async deleteNotebook(notebookId: string): Promise<void> {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
+  /* ===========================
+     Blocks
+     =========================== */
+
+  async getBlocks(notebookId: string): Promise<BlockInfo[]> {
+    const response = await fetch(
+      `${this.getApiBaseUrl()}/api/collaboration/notebooks/${notebookId}/blocks`
+    );
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to get blocks");
     }
 
-    this.socket.emit("notebook:delete", {
-      roomId: this.roomId,
-      notebookId: notebookId,
-    });
+    return result.data;
   }
 
-  // Block management
   async createBlock(
     notebookId: string,
     type: "code" | "markdown" | "output",
@@ -369,19 +465,6 @@ export class SocketCollaborationService {
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || "Failed to create block");
-    }
-
-    return result.data;
-  }
-
-  async getBlocks(notebookId: string): Promise<BlockInfo[]> {
-    const response = await fetch(
-      `${this.getApiBaseUrl()}/api/collaboration/notebooks/${notebookId}/blocks`
-    );
-    const result = await response.json();
-
-    if (!result.success) {
-      throw new Error(result.error || "Failed to get blocks");
     }
 
     return result.data;
@@ -435,7 +518,10 @@ export class SocketCollaborationService {
     }
   }
 
-  // Code collaboration
+  /* ===========================
+     Live collaboration emits
+     =========================== */
+
   sendCodeChange(data: CodeChangeData): void {
     if (!this.socket) {
       throw new Error("Not connected to collaboration service");
@@ -448,7 +534,8 @@ export class SocketCollaborationService {
         `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
-    this.socket.emit("code-change", changeData);
+    // Server listens for "code-changed"
+    this.socket.emit("code-changed", changeData);
   }
 
   sendCursorMove(
@@ -517,17 +604,17 @@ export class SocketCollaborationService {
     this.socket.emit("language-change", { language });
   }
 
-  // YJS integration
+  /* ===========================
+     YJS integration
+     =========================== */
+
   setupYjsDocument(notebookId: string): Y.Doc {
-    // Request initial document state
     if (this.socket) {
       this.socket.emit("request-yjs-state", { notebookId });
     }
 
-    // Setup YJS document
     const ydoc = new Y.Doc();
 
-    // Listen for document updates and send to server
     ydoc.on("update", (update: Uint8Array) => {
       if (this.socket) {
         const updateBase64 = btoa(String.fromCharCode(...update));
@@ -548,39 +635,32 @@ export class SocketCollaborationService {
 
   private handleYjsUpdate(data: any): void {
     const ydoc = this.notebooks.get(data.notebookId);
-    if (ydoc && data.userId !== this.getCurrentUserId()) {
-      try {
-        const update = Uint8Array.from(atob(data.update), (c) =>
-          c.charCodeAt(0)
-        );
-        Y.applyUpdate(ydoc, update);
-        this.emit("yjs-update", data);
-      } catch (error) {
-        console.error("Failed to apply YJS update:", error);
-      }
+    if (!ydoc) return;
+    try {
+      const update = Uint8Array.from(atob(data.update), (c) => c.charCodeAt(0));
+      Y.applyUpdate(ydoc, update);
+      this.emit("yjs-update", data);
+    } catch (error) {
+      console.error("Failed to apply YJS update:", error);
     }
   }
 
   private handleYjsState(data: any): void {
     const ydoc = this.notebooks.get(data.notebookId);
-    if (ydoc) {
-      try {
-        const state = Uint8Array.from(atob(data.state), (c) => c.charCodeAt(0));
-        Y.applyUpdate(ydoc, state);
-        this.emit("yjs-state", data);
-      } catch (error) {
-        console.error("Failed to apply YJS state:", error);
-      }
+    if (!ydoc) return;
+    try {
+      const state = Uint8Array.from(atob(data.state), (c) => c.charCodeAt(0));
+      Y.applyUpdate(ydoc, state);
+      this.emit("yjs-state", data);
+    } catch (error) {
+      console.error("Failed to apply YJS state:", error);
     }
   }
 
-  private getCurrentUserId(): string | null {
-    // This should be implemented based on your auth system
-    // For now, return null to avoid filtering own updates
-    return null;
-  }
+  /* ===========================
+     Getters
+     =========================== */
 
-  // Getters
   getActiveUsers(): UserPresence[] {
     return Array.from(this.activeUsers.values());
   }
