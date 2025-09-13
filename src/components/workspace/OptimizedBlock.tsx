@@ -21,13 +21,16 @@ import { BlockOutput } from "./BlockOutput";
 import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
 import type { Monaco } from "@monaco-editor/react";
+import { useCollaboration } from "../../hooks/useCollaboration";
+import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
+import { socketCollaborationService } from "../../lib/socketCollaborationService";
 
 interface OptimizedBlockProps {
   block: BlockType;
   isDragging: boolean;
   onAddBlockBelow: () => void;
   onFocus: (blockId: string) => void;
-  isEditor: boolean; // Whether this block should show the editor or preview
+  isEditor: boolean;
   monaco?: Monaco | null;
 }
 
@@ -37,20 +40,13 @@ const LANGUAGE_OPTIONS: { value: Lang; label: string }[] = [
   { value: "markdown", label: "Markdown" },
 ];
 
-// Calculate height based on content lines
 const calculateBlockHeight = (content: string): number => {
-  if (!content || content.trim() === "") {
-    return 120; // Fixed height for empty content
-  }
-
-  const lines = content.split("\n");
-  const actualLines = lines.length;
-  const lineHeight = 20; // Height per line in Monaco
-  const padding = 32; // Top and bottom padding for Monaco
-
-  // Calculate height: at least 4 lines visible, max 30 lines
-  const visibleLines = Math.max(4, Math.min(actualLines + 1, 30)); // +1 for cursor line
-  return visibleLines * lineHeight + padding;
+  if (!content || content.trim() === "") return 120;
+  const lines = content.split("\n").length;
+  const lineHeight = 20;
+  const padding = 32;
+  const visible = Math.max(4, Math.min(lines + 1, 30));
+  return visible * lineHeight + padding;
 };
 
 export function OptimizedBlock({
@@ -61,14 +57,10 @@ export function OptimizedBlock({
   isEditor,
   monaco,
 }: OptimizedBlockProps) {
-  const {
-    updateBlock,
-    deleteBlock,
-    duplicateBlock,
-    runBlock,
-    stopBlock,
-    blocks,
-  } = useBlocksStore();
+  const { blocks, updateBlock } = useBlocksStore();
+  const { activeNotebookId } = useCollaboration();
+  const { deleteBlock: deleteBlockRT, createBlockAt } =
+    useRealtimeBlocks(activeNotebookId);
 
   const [showLanguageSelect, setShowLanguageSelect] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState<{
@@ -104,92 +96,129 @@ export function OptimizedBlock({
   };
 
   const calculatePosition = useCallback(
-    (buttonRef: React.RefObject<HTMLButtonElement | null>) => {
-      if (!buttonRef.current) return { top: 0, left: 0 };
-
-      const rect = buttonRef.current.getBoundingClientRect();
-      return {
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      };
+    (ref: React.RefObject<HTMLButtonElement | null>) => {
+      const r = ref.current?.getBoundingClientRect();
+      return r
+        ? { top: r.bottom + window.scrollY, left: r.left + window.scrollX }
+        : { top: 0, left: 0 };
     },
     []
   );
 
   const handleLanguageToggle = useCallback(() => {
-    if (!showLanguageSelect) {
+    if (!showLanguageSelect)
       setDropdownPosition(calculatePosition(languageButtonRef));
-    }
-    setShowLanguageSelect(!showLanguageSelect);
+    setShowLanguageSelect((v) => !v);
   }, [showLanguageSelect, calculatePosition]);
 
   const handleMoreMenuToggle = useCallback(() => {
-    if (!showMoreMenu) {
-      setMoreMenuPosition(calculatePosition(moreButtonRef));
-    }
-    setShowMoreMenu(!showMoreMenu);
+    if (!showMoreMenu) setMoreMenuPosition(calculatePosition(moreButtonRef));
+    setShowMoreMenu((v) => !v);
   }, [showMoreMenu, calculatePosition]);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
       if (
         showLanguageSelect &&
         languageButtonRef.current &&
-        !languageButtonRef.current.contains(target)
+        !languageButtonRef.current.contains(t)
       ) {
         setShowLanguageSelect(false);
       }
-
       if (
         showMoreMenu &&
         moreButtonRef.current &&
-        !moreButtonRef.current.contains(target)
+        !moreButtonRef.current.contains(t)
       ) {
         setShowMoreMenu(false);
       }
     };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
   }, [showLanguageSelect, showMoreMenu]);
 
   const handleRun = () => {
+    // keep your local mock run handlers
     if (block.isRunning) {
-      stopBlock(block.id);
+      useBlocksStore.getState().stopBlock(block.id);
     } else {
-      runBlock(block.id);
+      useBlocksStore.getState().runBlock(block.id);
     }
   };
 
-  const handleMoveUp = () => {
-    const currentIndex = blocks.findIndex((b) => b.id === block.id);
-    if (currentIndex > 0) {
-      console.log("Move up", currentIndex, currentIndex - 1);
+  // Server-side reordering
+  const handleMoveUp = async () => {
+    if (!activeNotebookId) return;
+    const idx = blocks.findIndex((b) => b.id === block.id);
+    if (idx <= 0) return;
+    try {
+      await socketCollaborationService.moveBlock(
+        activeNotebookId,
+        block.id,
+        idx - 1
+      );
+    } catch (e) {
+      console.error("Move up failed:", e);
     }
   };
 
-  const handleMoveDown = () => {
-    const currentIndex = blocks.findIndex((b) => b.id === block.id);
-    if (currentIndex < blocks.length - 1) {
-      console.log("Move down", currentIndex, currentIndex + 1);
+  const handleMoveDown = async () => {
+    if (!activeNotebookId) return;
+    const idx = blocks.findIndex((b) => b.id === block.id);
+    if (idx === -1 || idx >= blocks.length - 1) return;
+    try {
+      await socketCollaborationService.moveBlock(
+        activeNotebookId,
+        block.id,
+        idx + 1
+      );
+    } catch (e) {
+      console.error("Move down failed:", e);
     }
   };
 
-  const handleDuplicate = () => {
-    console.log("Duplicating block:", block.id);
-    setShowMoreMenu(false); // Close menu first
-    duplicateBlock(block.id);
+  // Realtime delete
+  const handleDelete = async () => {
+    setShowMoreMenu(false);
+    if (!activeNotebookId) return;
+    try {
+      await deleteBlockRT(block.id); // server will broadcast; hook removes locally
+    } catch (e) {
+      console.error("Delete failed:", e);
+    }
   };
 
-  const handleDelete = () => {
-    console.log("Deleting block:", block.id);
-    setShowMoreMenu(false); // Close menu first
-    deleteBlock(block.id);
+  const handleDuplicate = async () => {
+    setShowMoreMenu(false);
+    if (!activeNotebookId) return;
+    const idx = blocks.findIndex((b) => b.id === block.id);
+    const insertAt = idx === -1 ? blocks.length : idx + 1;
+
+    try {
+      await createBlockAt(insertAt, "code", block.lang || "python");
+      setTimeout(() => {
+        // Find the newest block at that position (store is refreshed by hook)
+        const latest = useBlocksStore
+          .getState()
+          .blocks.slice()
+          .sort((a, b) => a.position - b.position)[insertAt];
+        if (latest) {
+          useBlocksStore
+            .getState()
+            .updateBlock(latest.id, { content: block.content });
+          // Let peers show a visual hint (the server’s “block-content-changed” is UI-level)
+          socketCollaborationService.sendCodeChange({
+            notebookId: activeNotebookId,
+            blockId: latest.id,
+            content: block.content,
+            cursorPosition: { line: 0, column: 0 },
+          });
+        }
+      }, 150);
+    } catch (e) {
+      console.error("Duplicate failed:", e);
+    }
   };
 
   const handleToggleCollapse = () => {
@@ -197,16 +226,12 @@ export function OptimizedBlock({
   };
 
   const handleBlockFocus = () => {
-    if (!isEditor) {
-      onFocus(block.id);
-    }
+    if (!isEditor) onFocus(block.id);
   };
 
   const currentIndex = blocks.findIndex((b) => b.id === block.id);
   const canMoveUp = currentIndex > 0;
   const canMoveDown = currentIndex < blocks.length - 1;
-
-  // Calculate dynamic height based on content
   const blockHeight = calculateBlockHeight(block.content);
 
   return (
@@ -226,9 +251,8 @@ export function OptimizedBlock({
       `}
       data-block-id={block.id}
     >
-      {/* Block Header */}
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-white/[0.03] backdrop-blur-md border-b border-white/[0.08] z-50">
-        {/* Left: Drag Handle & Language */}
         <div className="flex items-center space-x-2">
           <button
             {...attributes}
@@ -247,8 +271,8 @@ export function OptimizedBlock({
               onClick={handleLanguageToggle}
               className="text-orange-400 hover:text-orange-300 hover:bg-white/[0.05] font-mono text-xs"
             >
-              {LANGUAGE_OPTIONS.find((lang) => lang.value === block.lang)
-                ?.label || "Python"}
+              {LANGUAGE_OPTIONS.find((l) => l.value === block.lang)?.label ||
+                "Python"}
             </Button>
 
             {showLanguageSelect &&
@@ -265,14 +289,12 @@ export function OptimizedBlock({
                     <button
                       key={option.value}
                       onClick={() => handleLanguageChange(option.value)}
-                      className={`
-                      w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors
-                      ${
-                        block.lang === option.value
-                          ? "bg-accent text-orange-400"
-                          : "text-foreground/80"
-                      }
-                    `}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors
+                        ${
+                          block.lang === option.value
+                            ? "bg-accent text-orange-400"
+                            : "text-foreground/80"
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -295,21 +317,17 @@ export function OptimizedBlock({
           </button>
         </div>
 
-        {/* Right: Actions */}
         <div className="flex items-center space-x-1">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleRun}
             disabled={!block.content.trim()}
-            className={`
-              h-7 px-2 text-xs
-              ${
-                block.isRunning
-                  ? "text-red-400 hover:text-red-300"
-                  : "text-green-400 hover:text-green-300"
-              }
-            `}
+            className={`h-7 px-2 text-xs ${
+              block.isRunning
+                ? "text-red-400 hover:text-red-300"
+                : "text-green-400 hover:text-green-300"
+            }`}
             title={block.isRunning ? "Stop" : "Run Block (Shift+Enter)"}
           >
             {block.isRunning ? (
@@ -416,16 +434,14 @@ export function OptimizedBlock({
         </div>
       </div>
 
-      {/* Block Content */}
+      {/* Content */}
       {!block.collapsed && (
         <div className="flex flex-col">
-          {/* Editor or Preview */}
           {isEditor ? (
             <div
               className="bg-muted/40 backdrop-blur-sm rounded-md m-2 relative z-10 isolate"
               style={{ minHeight: blockHeight }}
             >
-              {/* The actual Monaco editor will be positioned here by the parent component */}
               <div
                 className="monaco-editor-placeholder"
                 style={{ minHeight: blockHeight }}
@@ -448,7 +464,6 @@ export function OptimizedBlock({
             </div>
           )}
 
-          {/* Block Output */}
           {(block.output || block.error || block.isRunning) && (
             <BlockOutput
               output={block.output}

@@ -20,9 +20,18 @@ import { useIntersectionVirtualization } from "../../hooks/useVirtualization";
 import { Button } from "../ui/button";
 import { Plus, FileText } from "lucide-react";
 import type { Monaco } from "@monaco-editor/react";
+import { useCollaboration } from "../../hooks/useCollaboration";
+import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
+import { socketCollaborationService } from "../../lib/socketCollaborationService";
 
 export function OptimizedNotebookArea() {
-  const { blocks, addBlock, reorderBlocks, updateBlock } = useBlocksStore();
+  const { blocks, updateBlock } = useBlocksStore();
+
+  const { activeNotebookId } = useCollaboration();
+
+  const { createBlockAt /*, deleteBlock*/ } =
+    useRealtimeBlocks(activeNotebookId);
+
   const [isDragging, setIsDragging] = useState(false);
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [monaco, setMonaco] = useState<Monaco | null>(null);
@@ -37,14 +46,8 @@ export function OptimizedNotebookArea() {
   const { observeElement } = useIntersectionVirtualization(0.1);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragStart = useCallback(() => {
@@ -52,39 +55,48 @@ export function OptimizedNotebookArea() {
   }, []);
 
   const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+    async (event: DragEndEvent) => {
       const { active, over } = event;
       setIsDragging(false);
+      if (!over || active.id === over.id || !activeNotebookId) return;
 
-      if (over && active.id !== over.id) {
-        const oldIndex = blocks.findIndex((block) => block.id === active.id);
-        const newIndex = blocks.findIndex((block) => block.id === over.id);
+      const oldIndex = blocks.findIndex((b) => b.id === active.id);
+      const newIndex = blocks.findIndex((b) => b.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
 
-        if (oldIndex !== -1 && newIndex !== -1) {
-          reorderBlocks(oldIndex, newIndex);
-        }
+      // Ask server to move; hook will refresh ordering via `block:moved`
+      try {
+        await socketCollaborationService.moveBlock(
+          activeNotebookId,
+          String(active.id),
+          newIndex
+        );
+      } catch (e) {
+        console.error("Failed to move block:", e);
       }
     },
-    [blocks, reorderBlocks]
+    [blocks, activeNotebookId]
   );
 
-  const handleAddBlock = () => {
-    const newBlockId = addBlock();
-    // Focus the new block
-    setTimeout(() => {
-      setFocusedBlockId(newBlockId);
-    }, 100);
-  };
+  const handleAddBlock = useCallback(() => {
+    if (!activeNotebookId) return;
+    const position = blocks.length; // append
+    // Create via server; socket event will insert into store
+    createBlockAt(position, "code", "python").catch((e) =>
+      console.error("Failed to create block:", e)
+    );
+    // Focus move will happen when the new block arrives; if you want optimistic focus,
+    // you could setFocusedBlockId to a temp id, but we’ll keep it simple.
+  }, [activeNotebookId, blocks.length, createBlockAt]);
 
   const handleAddBlockAt = useCallback(
     (position: number) => {
-      const newBlockId = addBlock(position);
-      // Focus the new block
-      setTimeout(() => {
-        setFocusedBlockId(newBlockId);
-      }, 100);
+      if (!activeNotebookId) return;
+      createBlockAt(position, "code", "python").catch((e) =>
+        console.error("Failed to create block:", e)
+      );
     },
-    [addBlock]
+    [activeNotebookId, createBlockAt]
   );
 
   const handleBlockFocus = useCallback((blockId: string) => {
@@ -93,6 +105,7 @@ export function OptimizedNotebookArea() {
 
   const handleContentChange = useCallback(
     (blockId: string, content: string) => {
+      // This updates local UI; your YJS/editor layer should handle CRDT syncing separately
       updateBlock(blockId, { content });
     },
     [updateBlock]
@@ -127,7 +140,7 @@ export function OptimizedNotebookArea() {
 
         editorPositionRef.current = { top, height };
 
-        // Position the shared editor
+        // Position the shared editor (unchanged UI)
         sharedEditor.style.position = "absolute";
         sharedEditor.style.top = `${top}px`;
         sharedEditor.style.left = `${
@@ -141,19 +154,13 @@ export function OptimizedNotebookArea() {
       }
     };
 
-    // Position immediately
     positionEditor();
 
-    // Update position on scroll and resize
-    const handleReposition = () => {
-      requestAnimationFrame(positionEditor);
-    };
-
+    const handleReposition = () => requestAnimationFrame(positionEditor);
     const container = notebookContainerRef.current;
     if (container) {
       container.addEventListener("scroll", handleReposition, { passive: true });
       window.addEventListener("resize", handleReposition, { passive: true });
-
       return () => {
         container.removeEventListener("scroll", handleReposition);
         window.removeEventListener("resize", handleReposition);
@@ -171,7 +178,6 @@ export function OptimizedNotebookArea() {
   // Handle when focused block is deleted
   useEffect(() => {
     if (focusedBlockId && !blocks.find((b) => b.id === focusedBlockId)) {
-      // Focused block was deleted, focus another block or clear focus
       if (blocks.length > 0) {
         setFocusedBlockId(blocks[0].id);
       } else {
@@ -180,7 +186,7 @@ export function OptimizedNotebookArea() {
     }
   }, [focusedBlockId, blocks]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (unchanged)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!focusedBlockId) return;
@@ -199,23 +205,21 @@ export function OptimizedNotebookArea() {
         }
       } else if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
-        // Run current block
+        // Run current block (placeholder)
         const block = blocks.find((b) => b.id === focusedBlockId);
         if (block && !block.isRunning) {
-          // This would trigger block execution
+          // trigger execution ui
           console.log("Run block:", focusedBlockId);
         }
-      } else if (event.key === "Enter" && event.metaKey) {
+      } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        // Add new block below
+        // Add new block below (via server)
         handleAddBlockAt(currentIndex + 1);
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [focusedBlockId, blocks, handleAddBlockAt]);
 
   return (
@@ -232,6 +236,8 @@ export function OptimizedNotebookArea() {
               onClick={handleAddBlock}
               size="sm"
               className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/20 transition-all duration-200"
+              disabled={!activeNotebookId}
+              title={!activeNotebookId ? "No active notebook" : "Add Block"}
             >
               <Plus className="w-4 h-4 mr-1" />
               Add Block
@@ -257,6 +263,8 @@ export function OptimizedNotebookArea() {
             <Button
               onClick={handleAddBlock}
               className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/20 transition-all duration-200"
+              disabled={!activeNotebookId}
+              title={!activeNotebookId ? "No active notebook" : "Create Block"}
             >
               <Plus className="w-4 h-4 mr-2" />
               Create First Block
@@ -282,6 +290,7 @@ export function OptimizedNotebookArea() {
                         key={block.id}
                         ref={(element) => observeElement(block.id, element)}
                         data-block-index={index}
+                        data-block-id={block.id} // keep for shared editor positioning
                       >
                         <OptimizedBlock
                           block={block}
