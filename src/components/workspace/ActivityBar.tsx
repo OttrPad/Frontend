@@ -1,6 +1,14 @@
 import React from "react";
 import { useAppStore } from "../../store/workspace";
-import { Users, TestTube, GitBranch, Bot, Files, Terminal, MessageSquare } from "lucide-react";
+import {
+  Users,
+  TestTube,
+  GitBranch,
+  Bot,
+  BookOpen,
+  Terminal,
+  MessageSquare,
+} from "lucide-react";
 import { cn } from "../../lib/utils";
 
 type ActivityType = "files" | "users" | "tests" | "versions" | "ai" | "chat";
@@ -15,9 +23,9 @@ interface ActivityItem {
 const activities: ActivityItem[] = [
   {
     id: "files",
-    icon: Files,
-    label: "Files",
-    tooltip: "Explorer",
+    icon: BookOpen,
+    label: "Notebooks",
+    tooltip: "Notebook Explorer",
   },
   {
     id: "users",

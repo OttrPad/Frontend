@@ -1,5 +1,5 @@
 import { useAppStore } from "../../store/workspace";
-import { FilesSidebar } from "./FilesSidebar";
+import { NotebookSidebar } from "./NotebookSidebar";
 import { UsersPane } from "./panels/UsersPane";
 import { TestsPane } from "./panels/TestsPane";
 import { VersionsPane } from "./panels/VersionsPane";
@@ -12,7 +12,7 @@ export function LeftSidebar() {
   const renderActivePanel = () => {
     switch (activeActivity) {
       case "files":
-        return <FilesSidebar />;
+        return <NotebookSidebar />;
       case "users":
         return (
           <div className="h-full">
@@ -44,7 +44,7 @@ export function LeftSidebar() {
           </div>
         );
       default:
-        return <FilesSidebar />;
+        return <NotebookSidebar />;
     }
   };
 

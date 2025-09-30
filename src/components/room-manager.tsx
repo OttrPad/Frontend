@@ -7,32 +7,153 @@ import { Label } from "@/components/ui/label";
 import { apiClient, type Room, ApiRequestError } from "@/lib/apiClient";
 import { toast } from "react-toastify";
 
-// Extended Room interface to include fields from the API response
 interface ExtendedRoom extends Room {
   room_code?: string;
-  original_room_id?: number; // Keep the original numeric ID for API calls
+  original_room_id?: number;
 }
 
-// Remove mock data - will be replaced with API data
+/** ---- Mock templates (UI-only for now) ---- */
+type TemplateKey = "data-analysis" | "ml-starter" | "web-scraping" | "viz";
+
+const TEMPLATES: Array<{
+  key: TemplateKey;
+  name: string;
+  tagline: string;
+  packages: string[];
+  accentFrom: string; // tailwind color utility
+  accentTo: string; // tailwind color utility
+  icon: React.ReactElement;
+}> = [
+  {
+    key: "data-analysis",
+    name: "Data Analysis",
+    tagline: "Preinstalled: numpy, pandas",
+    packages: ["numpy", "pandas"],
+    accentFrom: "from-emerald-400/20",
+    accentTo: "to-emerald-500/20",
+    icon: (
+      <svg
+        className="w-6 h-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 3v18h18"
+        />
+        <rect x="6" y="10" width="3" height="6" rx="1" strokeWidth={2} />
+        <rect x="11" y="6" width="3" height="10" rx="1" strokeWidth={2} />
+        <rect x="16" y="12" width="3" height="4" rx="1" strokeWidth={2} />
+      </svg>
+    ),
+  },
+  {
+    key: "ml-starter",
+    name: "ML Starter",
+    tagline: "Preinstalled: scikit-learn, numpy",
+    packages: ["scikit-learn", "numpy"],
+    accentFrom: "from-sky-400/20",
+    accentTo: "to-sky-500/20",
+    icon: (
+      <svg
+        className="w-6 h-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 6v12m6-6H6"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: "web-scraping",
+    name: "Web Scraping",
+    tagline: "Preinstalled: requests, BeautifulSoup",
+    packages: ["requests", "beautifulsoup4"],
+    accentFrom: "from-fuchsia-400/20",
+    accentTo: "to-fuchsia-500/20",
+    icon: (
+      <svg
+        className="w-6 h-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 4h8l4 4v8l-4 4H8l-4-4V8l4-4z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 9h6M9 13h6"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: "viz",
+    name: "Visualization",
+    tagline: "Preinstalled: matplotlib, seaborn",
+    packages: ["matplotlib", "seaborn"],
+    accentFrom: "from-orange-400/20",
+    accentTo: "to-orange-500/20",
+    icon: (
+      <svg
+        className="w-6 h-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 3v18h18"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M6 16l3-3 3 2 4-6 2 3"
+        />
+      </svg>
+    ),
+  },
+];
 
 export function RoomManager() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [roomCode, setRoomCode] = useState("");
-  const [userId, setUserId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomDesc, setNewRoomDesc] = useState("");
   const [rooms, setRooms] = useState<ExtendedRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey | null>(
+    "data-analysis"
+  );
+
   const [formErrors, setFormErrors] = useState<{
     roomName?: string;
     roomDesc?: string;
     roomCode?: string;
+    template?: string;
   }>({});
 
-  // Fetch rooms on component mount
   useEffect(() => {
     fetchRooms();
   }, []);
@@ -42,7 +163,6 @@ export function RoomManager() {
       setIsLoading(true);
       const response = await apiClient.getAllRooms();
 
-      // Ensure we have a valid array and map to expected format
       if (response && Array.isArray(response.rooms)) {
         const mappedRooms = response.rooms.map((room) => ({
           id: room.room_id.toString(),
@@ -51,8 +171,8 @@ export function RoomManager() {
           room_code: room.room_code,
           created_at: room.created_at,
           created_by: room.created_by,
-          updated_at: room.created_at, // Using created_at as fallback
-          original_room_id: room.room_id, // Preserve the original numeric ID
+          updated_at: room.created_at,
+          original_room_id: room.room_id,
         }));
         setRooms(mappedRooms);
       } else {
@@ -81,7 +201,6 @@ export function RoomManager() {
         toast.error("Failed to load rooms. Please check your connection.");
       }
 
-      // Set empty array on error to show "No rooms available" message
       setRooms([]);
     } finally {
       setIsLoading(false);
@@ -89,7 +208,6 @@ export function RoomManager() {
   };
 
   const handleJoinRoom = async () => {
-    // Validate room code format (xxx-xxx-xxx)
     const roomCodePattern = /^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/;
     if (!roomCodePattern.test(roomCode)) {
       setFormErrors({ roomCode: "Room code must be in format: abc-123-def" });
@@ -100,15 +218,11 @@ export function RoomManager() {
     try {
       setIsJoining(true);
       setFormErrors({});
-
       await apiClient.joinRoom(roomCode);
       toast.success("Successfully joined the room!");
-
-      // Navigate to workspace using room code
       navigate(`/workspace/${roomCode}`);
     } catch (error) {
       console.error("Failed to join room:", error);
-
       if (error instanceof ApiRequestError) {
         switch (error.statusCode) {
           case 404:
@@ -138,17 +252,11 @@ export function RoomManager() {
   };
 
   const handleCreateRoom = async () => {
-    // Reset form errors
     setFormErrors({});
-
-    // Validate inputs
     const errors: typeof formErrors = {};
-    if (!newRoomName.trim()) {
-      errors.roomName = "Room name is required";
-    }
-    if (!newRoomDesc.trim()) {
-      errors.roomDesc = "Room description is required";
-    }
+    if (!newRoomName.trim()) errors.roomName = "Room name is required";
+    if (!newRoomDesc.trim()) errors.roomDesc = "Room description is required";
+    if (!selectedTemplate) errors.template = "Please select a template";
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -157,22 +265,23 @@ export function RoomManager() {
 
     try {
       setIsCreating(true);
-
+      // NOTE: backend doesn’t take template yet; this is UI-only mock
       const response = await apiClient.createRoom(
         newRoomName.trim(),
         newRoomDesc.trim()
       );
 
-      toast.success(`Room "${newRoomName}" created successfully!`);
+      const tpl = TEMPLATES.find((t) => t.key === selectedTemplate);
+      toast.success(
+        `Room "${newRoomName}" created with template: ${tpl?.name}`
+      );
 
-      // Clear form
       setNewRoomName("");
       setNewRoomDesc("");
+      // leave selection persistent so new rooms default to last choice
 
-      // Refresh rooms list
       fetchRooms();
 
-      // Navigate directly to the new room using room code
       if (response.room?.room_code) {
         navigate(`/workspace/${response.room.room_code}`);
       } else if (response.room?.id) {
@@ -219,18 +328,12 @@ export function RoomManager() {
 
   const handleJoinExistingRoom = async (room: ExtendedRoom) => {
     try {
-      // Prefer room_code for joining, then original_room_id, fallback to string id
       const joinIdentifier =
         room.room_code || room.original_room_id?.toString() || room.id;
       await apiClient.joinRoom(joinIdentifier);
       toast.success("Successfully joined the room!");
-
-      // Navigate using room code if available, otherwise use room ID
-      if (room.room_code) {
-        navigate(`/workspace/${room.room_code}`);
-      } else {
-        navigate(`/workspace/${room.id}`);
-      }
+      if (room.room_code) navigate(`/workspace/${room.room_code}`);
+      else navigate(`/workspace/${room.id}`);
     } catch (error) {
       console.error("Failed to join room:", error);
       console.error("Room data:", room);
@@ -243,11 +346,8 @@ export function RoomManager() {
         switch (error.statusCode) {
           case 409:
             toast.info("You are already a member of this room!");
-            if (room.room_code) {
-              navigate(`/workspace/${room.room_code}`);
-            } else {
-              navigate(`/workspace/${room.id}`);
-            }
+            if (room.room_code) navigate(`/workspace/${room.room_code}`);
+            else navigate(`/workspace/${room.id}`);
             break;
           case 403:
             toast.error(
@@ -273,8 +373,7 @@ export function RoomManager() {
           {/* Tab Headers */}
           <div className="flex mb-8">
             <button
-              onClick={() =>  setActiveTab("join") }
-              
+              onClick={() => setActiveTab("join")}
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-l-xl transition-all duration-200 ${
                 activeTab === "join"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
@@ -299,8 +398,7 @@ export function RoomManager() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab("create") }
-              
+              onClick={() => setActiveTab("create")}
               className={`flex-1 px-6 py-3 text-sm font-medium rounded-r-xl transition-all duration-200 ${
                 activeTab === "create"
                   ? "bg-gradient-to-r from-orange-400 to-orange-500 text-black shadow-lg"
@@ -369,7 +467,10 @@ export function RoomManager() {
                       value={roomCode}
                       onChange={(e) => {
                         setRoomCode(e.target.value.toLowerCase());
-                        setFormErrors({ ...formErrors, roomCode: undefined });
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          roomCode: undefined,
+                        }));
                       }}
                       className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all lowercase tracking-widest text-center text-lg font-mono ${
                         formErrors.roomCode
@@ -438,7 +539,10 @@ export function RoomManager() {
                       value={newRoomName}
                       onChange={(e) => {
                         setNewRoomName(e.target.value);
-                        setFormErrors({ ...formErrors, roomName: undefined });
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          roomName: undefined,
+                        }));
                       }}
                       className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all ${
                         formErrors.roomName
@@ -468,7 +572,10 @@ export function RoomManager() {
                       value={newRoomDesc}
                       onChange={(e) => {
                         setNewRoomDesc(e.target.value);
-                        setFormErrors({ ...formErrors, roomDesc: undefined });
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          roomDesc: undefined,
+                        }));
                       }}
                       className={`mt-2 bg-white/[0.05] backdrop-blur-md border-white/[0.1] text-white placeholder:text-white/50 focus:border-orange-400/60 focus:bg-white/[0.08] focus:ring-1 focus:ring-orange-400/20 transition-all ${
                         formErrors.roomDesc
@@ -484,18 +591,74 @@ export function RoomManager() {
                     )}
                   </div>
 
-                  {/* <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      id="private-room"
-                      checked={isPrivate}
-                      onChange={(e) => setIsPrivate(e.target.checked)}
-                      className="w-4 h-4 text-orange-400 bg-white/[0.05] border-white/[0.1] rounded focus:ring-orange-400/20"
-                    />
-                    <Label htmlFor="private-room" className="text-white">
-                      Make this room private
-                    </Label>
-                  </div> */}
+                  {/* Template Picker (mock) */}
+                  <div className="space-y-2">
+                    <Label className="text-white font-medium">Template</Label>
+                    <p className="text-xs text-white/50">
+                      Choose a starting environment for your first notebook
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      {TEMPLATES.map((tpl) => {
+                        const active = selectedTemplate === tpl.key;
+                        return (
+                          <button
+                            key={tpl.key}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTemplate(tpl.key);
+                              setFormErrors((prev) => ({
+                                ...prev,
+                                template: undefined,
+                              }));
+                            }}
+                            className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-200
+                              bg-white/[0.03] backdrop-blur-md
+                              ${
+                                active
+                                  ? "border-orange-400/50 ring-2 ring-orange-400/30"
+                                  : "border-white/[0.08] hover:border-white/[0.12]"
+                              }
+                              hover:bg-white/[0.05]
+                            `}
+                          >
+                            <div
+                              className={`w-10 h-10 rounded-lg flex items-center justify-center border ${tpl.accentFrom} ${tpl.accentTo} bg-gradient-to-br border-white/10 text-white`}
+                            >
+                              {tpl.icon}
+                            </div>
+                            <div className="text-left">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-sm font-semibold ${
+                                    active ? "text-orange-300" : "text-white"
+                                  }`}
+                                >
+                                  {tpl.name}
+                                </span>
+                                {active && (
+                                  <span className="px-2 py-0.5 text-[10px] rounded bg-orange-500/20 text-orange-300 border border-orange-400/30">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-white/60">
+                                {tpl.tagline}
+                              </div>
+                              <div className="mt-1 text-[11px] text-white/40">
+                                Packages: {tpl.packages.join(", ")}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {formErrors.template && (
+                      <p className="mt-1 text-xs text-red-400">
+                        {formErrors.template}
+                      </p>
+                    )}
+                  </div>
 
                   <Button
                     className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-black hover:from-orange-300 hover:to-orange-400 font-medium py-2.5 shadow-lg hover:shadow-xl transition-all duration-200"
@@ -511,7 +674,7 @@ export function RoomManager() {
         </CardContent>
       </Card>
 
-      {/* Recent Rooms Section */}
+      {/* Available Rooms */}
       <Card className="bg-black/15 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
         <CardContent className="p-8">
           <div className="space-y-6">
