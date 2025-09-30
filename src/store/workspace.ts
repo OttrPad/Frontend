@@ -43,6 +43,9 @@ interface BlocksState {
   stopBlock: (id: string) => void;
   selectBlock: (id: string | null) => void;
   getBlockById: (id: string) => Block | undefined;
+  setBlocks: (blocks: Block[]) => void;
+  upsertBlock: (block: Block) => void;
+  removeBlock: (id: string) => void;
 }
 
 // Milestones Store
@@ -230,6 +233,7 @@ export const useBlocksStore = create<BlocksState>()(
       ],
       selectedBlockId: null,
 
+      // Create a new block locally (used for non-realtime flows/UI convenience)
       addBlock: (position, lang = "python") => {
         const newBlock: Block = {
           id: uuidv4(),
@@ -244,38 +248,34 @@ export const useBlocksStore = create<BlocksState>()(
           const blocks = [...state.blocks];
           if (position !== undefined) {
             blocks.splice(position, 0, newBlock);
-            // Update positions
-            blocks.forEach((block, index) => {
-              block.position = index;
-            });
           } else {
             blocks.push(newBlock);
           }
+          // normalize positions
+          blocks
+            .sort((a, b) => a.position - b.position)
+            .forEach((b, i) => (b.position = i));
           return { blocks };
         });
 
         return newBlock.id;
       },
 
+      // Update a block’s fields
       updateBlock: (id, updates) => {
         set((state) => ({
-          blocks: state.blocks.map((block) =>
-            block.id === id
-              ? { ...block, ...updates, updatedAt: Date.now() }
-              : block
+          blocks: state.blocks.map((b) =>
+            b.id === id ? { ...b, ...updates, updatedAt: Date.now() } : b
           ),
         }));
       },
 
       deleteBlock: (id) => {
         set((state) => {
-          const blocks = state.blocks.filter((block) => block.id !== id);
-          // Update positions
-          blocks.forEach((block, index) => {
-            block.position = index;
-          });
+          const next = state.blocks.filter((b) => b.id !== id);
+          next.forEach((b, i) => (b.position = i));
           return {
-            blocks,
+            blocks: next,
             selectedBlockId:
               state.selectedBlockId === id ? null : state.selectedBlockId,
           };
@@ -285,73 +285,87 @@ export const useBlocksStore = create<BlocksState>()(
       reorderBlocks: (sourceIndex, destinationIndex) => {
         set((state) => {
           const blocks = [...state.blocks];
-          const [movedBlock] = blocks.splice(sourceIndex, 1);
-          blocks.splice(destinationIndex, 0, movedBlock);
-
-          // Update positions
-          blocks.forEach((block, index) => {
-            block.position = index;
-          });
-
+          const [moved] = blocks.splice(sourceIndex, 1);
+          blocks.splice(destinationIndex, 0, moved);
+          blocks.forEach((b, i) => (b.position = i));
           return { blocks };
         });
       },
 
       duplicateBlock: (id) => {
-        const block = get().getBlockById(id);
-        if (block) {
-          const newBlock: Block = {
-            ...block,
-            id: uuidv4(),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            position: block.position + 1,
-          };
+        const original = get().getBlockById(id);
+        if (!original) return;
 
-          set((state) => {
-            const blocks = [...state.blocks];
-            blocks.splice(block.position + 1, 0, newBlock);
-            // Update positions
-            blocks.forEach((block, index) => {
-              block.position = index;
-            });
-            return { blocks };
-          });
-        }
+        const clone: Block = {
+          ...original,
+          id: uuidv4(),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          position: original.position + 1,
+        };
+
+        set((state) => {
+          const blocks = [...state.blocks];
+          blocks.splice(original.position + 1, 0, clone);
+          blocks.forEach((b, i) => (b.position = i));
+          return { blocks };
+        });
       },
 
+      // Mock run helpers (unchanged)
       runBlock: (id) => {
-        // Mock implementation - will be replaced with real execution
         get().updateBlock(id, { isRunning: true, output: "", error: "" });
-
         setTimeout(() => {
-          const block = get().getBlockById(id);
-          if (block) {
-            const mockOutput = `Executed ${block.lang} code:\n${block.content}\n\nOutput: Success`;
-            get().updateBlock(id, {
-              isRunning: false,
-              output: mockOutput,
-            });
+          const b = get().getBlockById(id);
+          if (b) {
+            const out = `Executed ${b.lang} code:\n${b.content}\n\nOutput: Success`;
+            get().updateBlock(id, { isRunning: false, output: out });
           }
         }, 1000);
       },
 
       runAllBlocks: () => {
-        get().blocks.forEach((block) => {
-          get().runBlock(block.id);
-        });
+        get().blocks.forEach((b) => get().runBlock(b.id));
       },
 
       stopBlock: (id) => {
         get().updateBlock(id, { isRunning: false });
       },
 
-      selectBlock: (id) => {
-        set({ selectedBlockId: id });
+      selectBlock: (id) => set({ selectedBlockId: id }),
+
+      getBlockById: (id) => get().blocks.find((b) => b.id === id),
+
+      setBlocks: (blocks) => {
+        const next = [...blocks]
+          .sort((a, b) => a.position - b.position)
+          .map((b, i) => ({ ...b, position: i })); // normalize positions
+        set({ blocks: next });
       },
 
-      getBlockById: (id) => {
-        return get().blocks.find((block) => block.id === id);
+      upsertBlock: (incoming) => {
+        set((state) => {
+          const idx = state.blocks.findIndex((b) => b.id === incoming.id);
+          const next = [...state.blocks];
+          if (idx === -1) next.push(incoming);
+          else next[idx] = { ...next[idx], ...incoming };
+          next
+            .sort((a, b) => a.position - b.position)
+            .forEach((b, i) => (b.position = i));
+          return { blocks: next };
+        });
+      },
+
+      removeBlock: (id) => {
+        set((state) => {
+          const next = state.blocks.filter((b) => b.id !== id);
+          next.forEach((b, i) => (b.position = i));
+          return {
+            blocks: next,
+            selectedBlockId:
+              state.selectedBlockId === id ? null : state.selectedBlockId,
+          };
+        });
       },
     }),
     { name: "blocks-store" }
@@ -567,16 +581,21 @@ export const useAIStore = create<AIState>()(
         const translateProviderMessage = (text: string) => {
           if (!text) return text;
           const t = String(text);
-          if (t.includes("Direct access to Core service is not allowed") || t.includes("Core service is not allowed")) {
+          if (
+            t.includes("Direct access to Core service is not allowed") ||
+            t.includes("Core service is not allowed")
+          ) {
             return (
               "AI provider rejected the request: Direct access to Core service is not allowed. " +
               "Check server-side AI configuration (GEMINI_API_KEY / credentials) and gateway routing."
             );
           }
-          if (t.toLowerCase().includes("bearer token") || t.toLowerCase().includes("provide a valid bearer") || t.toLowerCase().includes("invalid bearer")) {
-            return (
-              "AI request failed: Missing or invalid Bearer token. Ensure your server sets GEMINI_API_KEY and forwards an Authorization: Bearer <token> header to the AI gateway."
-            );
+          if (
+            t.toLowerCase().includes("bearer token") ||
+            t.toLowerCase().includes("provide a valid bearer") ||
+            t.toLowerCase().includes("invalid bearer")
+          ) {
+            return "AI request failed: Missing or invalid Bearer token. Ensure your server sets GEMINI_API_KEY and forwards an Authorization: Bearer <token> header to the AI gateway.";
           }
           return text;
         };
@@ -585,7 +604,10 @@ export const useAIStore = create<AIState>()(
           ...message,
           id: uuidv4(),
           timestamp: Date.now(),
-          content: message.role === "assistant" ? translateProviderMessage(message.content) : message.content,
+          content:
+            message.role === "assistant"
+              ? translateProviderMessage(message.content)
+              : message.content,
         };
 
         set((state) => ({
@@ -610,18 +632,23 @@ export const useAIStore = create<AIState>()(
         let attempt = 0;
         let lastError: unknown = null;
 
-  // Provide a transient retry hint message which we'll add between attempts
-  const addRetryHint = (msg: string) => get().addMessage({ role: "assistant", content: msg });
+        // Provide a transient retry hint message which we'll add between attempts
+        const addRetryHint = (msg: string) =>
+          get().addMessage({ role: "assistant", content: msg });
 
         while (attempt < maxAttempts) {
           try {
             attempt += 1;
             if (attempt > 1) {
-              addRetryHint(`Retrying AI request (attempt ${attempt}/${maxAttempts})...`);
+              addRetryHint(
+                `Retrying AI request (attempt ${attempt}/${maxAttempts})...`
+              );
             }
 
             const payload = await apiClient.generateAiContent(content);
-            const texts: string[] = Array.isArray(payload?.texts) ? payload.texts : [String(payload)];
+            const texts: string[] = Array.isArray(payload?.texts)
+              ? payload.texts
+              : [String(payload)];
             for (const t of texts) {
               get().addMessage({ role: "assistant", content: t });
             }
@@ -635,9 +662,14 @@ export const useAIStore = create<AIState>()(
 
             // If it's a client/validation error or rate-limit, don't retry
             const e = err as unknown as { statusCode?: number };
-            const status = e?.statusCode ?? (err && typeof err === "object" && (err as Error).message ? undefined : undefined);
+            const status =
+              e?.statusCode ??
+              (err && typeof err === "object" && (err as Error).message
+                ? undefined
+                : undefined);
             // Retry only on server-side 5xx
-            const isServerError = typeof status === "number" ? status >= 500 && status < 600 : true;
+            const isServerError =
+              typeof status === "number" ? status >= 500 && status < 600 : true;
 
             if (attempt >= maxAttempts || !isServerError) {
               break;
@@ -651,9 +683,15 @@ export const useAIStore = create<AIState>()(
 
         if (lastError) {
           console.error("AI request failed after retries", lastError);
-          const e = lastError as unknown as { statusCode?: number; message?: string };
+          const e = lastError as unknown as {
+            statusCode?: number;
+            message?: string;
+          };
           const msg = e?.message || String(lastError);
-          get().addMessage({ role: "assistant", content: `AI request failed after ${maxAttempts} attempts: ${msg}. Try again later.` });
+          get().addMessage({
+            role: "assistant",
+            content: `AI request failed after ${maxAttempts} attempts: ${msg}. Try again later.`,
+          });
         }
 
         set({ isLoading: false });
@@ -679,8 +717,6 @@ socket.on("connect_error", (error: Error) => {
     // window.location.href = "/login";
   }
 });
-
-
 
 // Message from server
 socket.on("message", (message: unknown) => {
@@ -711,7 +747,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
       }
       return null;
     })
-    .filter(Boolean); //removes any null values (so only valid message objects remain) 
+    .filter(Boolean); //removes any null values (so only valid message objects remain)
 
   // Replace existing messages for this room with history
   const chatStore = useChatStore.getState();
@@ -726,7 +762,7 @@ socket.on("chat-history", (data: { roomId: string; messages: unknown[] }) => {
 // Chat errors from server
 socket.on("chat:error", (error: { message: string }) => {
   console.error("Chat error:", error.message);
- 
+
   // toast.error(error.message);
 });
 
@@ -883,7 +919,7 @@ export const useAppStore = create<AppState>()(
       setCurrentRoom: (roomId) => {
         // Normalize and set currentRoom synchronously
         const normalized = roomId == null ? null : String(roomId);
-  set({ currentRoom: normalized });
+        set({ currentRoom: normalized });
 
         // Perform socket lifecycle actions asynchronously
         queueMicrotask(async () => {
@@ -900,7 +936,10 @@ export const useAppStore = create<AppState>()(
             const { connectSocketWithToken, socket: s } = sockHelpers;
             await connectSocketWithToken(token);
 
-            const sockAny = s as unknown as { __lastJoinedRoom?: string | null; emit: (...args: unknown[]) => void };
+            const sockAny = s as unknown as {
+              __lastJoinedRoom?: string | null;
+              emit: (...args: unknown[]) => void;
+            };
             const prev = sockAny.__lastJoinedRoom ?? null;
             const next = normalized;
 
