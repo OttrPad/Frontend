@@ -563,7 +563,7 @@ export const useAIStore = create<AIState>()(
       isLoading: false,
 
       addMessage: (message) => {
-        // Translate some provider messages into helpful guidance for the user
+        // Translate some technical AI error text into helpful friendlier explanation for the user.
         const translateProviderMessage = (text: string) => {
           if (!text) return text;
           const t = String(text);
@@ -600,7 +600,7 @@ export const useAIStore = create<AIState>()(
       sendMessage: async (content) => {
         // optimistic add user message
         get().addMessage({ role: "user", content });
-        set({ isLoading: true });
+        set({ isLoading: true });// to show a loading state.
 
         const mod = await import("../lib/apiClient");
         const apiClient = mod.apiClient;
