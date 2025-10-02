@@ -20,6 +20,7 @@ import {
   useBlocksStore,
   useMilestonesStore,
 } from "../../store/workspace";
+import { useExecution } from "../../hooks/useExecution";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
 import { toast } from "react-toastify";
@@ -31,12 +32,12 @@ interface EditorTopbarProps {
 export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const { theme, toggleTheme, toggleLeftSidebar, toggleRightSidebar } =
     useAppStore();
-  const { addBlock, runAllBlocks, blocks } = useBlocksStore();
+  const { addBlock, blocks } = useBlocksStore();
   const { saveMilestone } = useMilestonesStore();
+  const { runAll, isRunning, stop } = useExecution(roomId);
   const navigate = useNavigate();
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
 
   // Handle click outside to close menu
@@ -78,10 +79,11 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
   };
 
   const handleRunAll = () => {
-    setIsRunning(true);
-    runAllBlocks();
-    // Mock: Reset running state after 2 seconds
-    setTimeout(() => setIsRunning(false), 2000);
+    if (isRunning) {
+      stop();
+      return;
+    }
+    runAll();
   };
 
   const handleAddBlock = () => {
@@ -143,13 +145,17 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
           <Button
             size="sm"
             onClick={handleRunAll}
-            disabled={isRunning || blocks.length === 0}
-            className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-primary-foreground shadow-lg shadow-green-500/20 transition-all duration-200"
+            disabled={blocks.length === 0}
+            className={
+              isRunning
+                ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 transition-all duration-200"
+                : "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-primary-foreground shadow-lg shadow-green-500/20 transition-all duration-200"
+            }
           >
             {isRunning ? (
               <>
                 <StopCircle className="w-4 h-4 mr-1" />
-                Running...
+                Stop
               </>
             ) : (
               <>

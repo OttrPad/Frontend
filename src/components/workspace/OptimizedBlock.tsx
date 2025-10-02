@@ -22,6 +22,8 @@ import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
 import type { Monaco } from "@monaco-editor/react";
 import { useCollaboration } from "../../hooks/useCollaboration";
+import { useExecution } from "../../hooks/useExecution";
+import { useParams } from "react-router-dom";
 import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
 
@@ -59,6 +61,9 @@ export function OptimizedBlock({
 }: OptimizedBlockProps) {
   const { blocks, updateBlock } = useBlocksStore();
   const { activeNotebookId } = useCollaboration();
+  const { roomId, roomCode } = useParams();
+  const roomIdentifier = (roomId || roomCode || "") as string;
+  const { runSingle, isRunning: globalRunning } = useExecution(roomIdentifier);
   const { deleteBlock: deleteBlockRT, createBlockAt } =
     useRealtimeBlocks(activeNotebookId);
 
@@ -139,12 +144,9 @@ export function OptimizedBlock({
   }, [showLanguageSelect, showMoreMenu]);
 
   const handleRun = () => {
-    // keep your local mock run handlers
-    if (block.isRunning) {
-      useBlocksStore.getState().stopBlock(block.id);
-    } else {
-      useBlocksStore.getState().runBlock(block.id);
-    }
+    if (!block.content.trim()) return;
+    if (block.isRunning || globalRunning) return; // simple guard
+    runSingle(block.id);
   };
 
   // Server-side reordering
