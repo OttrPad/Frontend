@@ -77,6 +77,7 @@ export function CollaborationProvider({
   const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
+  // Removed execution session lifecycle (only /exec is used during runs)
 
   // refs for stable usage in handlers
   const activeNotebookIdRef = useRef<string | null>(null);
@@ -234,6 +235,8 @@ export function CollaborationProvider({
         // 4) mark connected now that we’re in the room
         setIsConnected(true);
 
+        // (executor auto-start removed)
+
         // 5) REST fallback (auth header now included in service)
         //    If socket push didn’t arrive yet, this ensures the list appears.
         await loadNotebooks();
@@ -279,6 +282,7 @@ export function CollaborationProvider({
 
       socketCollaborationService.disconnect();
       setIsConnected(false);
+      // (executor stop removed)
     };
   }, [
     roomIdentifier,

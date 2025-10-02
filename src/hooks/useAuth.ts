@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import supabase from "@/lib/supabaseClient";
+import { useRunStore } from "@/store/workspace";
 
 interface AuthState {
   user: User | null;
@@ -41,6 +42,15 @@ export function useAuth(): AuthState {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Clear execution run outputs and reset running flag on logout
+    try {
+      const runStore = useRunStore.getState();
+      runStore.clearOutputs();
+      useRunStore.setState({ isRunning: false });
+    } catch (e) {
+      // Non-fatal; log and continue
+      console.warn("Failed to clear run store on sign out", e);
+    }
   };
 
   return {

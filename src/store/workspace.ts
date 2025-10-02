@@ -72,9 +72,11 @@ interface PresenceState {
 interface RunState {
   outputs: RunOutput[];
   isRunning: boolean;
-  addOutput: (output: Omit<RunOutput, "id" | "timestamp">) => void;
+  addOutput: (output: Omit<RunOutput, "id" | "timestamp">) => string;
   clearOutputs: () => void;
   updateOutput: (id: string, updates: Partial<RunOutput>) => void;
+  setIsRunning: (running: boolean) => void;
+  // executionStarted removed (stateless exec model)
 }
 
 // Tests Store
@@ -471,6 +473,7 @@ export const useRunStore = create<RunState>()(
         set((state) => ({
           outputs: [...state.outputs, newOutput],
         }));
+        return newOutput.id;
       },
 
       clearOutputs: () => {
@@ -484,6 +487,7 @@ export const useRunStore = create<RunState>()(
           ),
         }));
       },
+      setIsRunning: (running) => set({ isRunning: running }),
     }),
     { name: "run-store" }
   )
