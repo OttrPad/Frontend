@@ -13,9 +13,12 @@ import {
   Menu,
   PanelRightOpen,
   LogOut,
+  Loader2,
+  Lock,
 } from "lucide-react";
 import { useAppStore, useMilestonesStore } from "../../store/workspace";
 import { useExecution } from "../../hooks/useExecution";
+import { useExecutionStatus } from "../../hooks/useExecutionStatus";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
 import { toast } from "react-toastify";
@@ -33,6 +36,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  const { isReady, isVenvSettingUp } = useExecutionStatus(roomId);
 
   // Handle click outside to close menu
   useEffect(() => {
@@ -70,6 +74,12 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
 
   const handleLeaveRoom = () => {
     setShowSettingsMenu(false);
+    // Optionally stop the execution container on leave (idle reaper also exists)
+    try {
+      stop();
+    } catch {
+      // ignore stop errors on leave
+    }
     toast.success("Left room successfully");
     navigate("/join");
   };
@@ -138,10 +148,16 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             Add Block
           </Button> */}
 
+          {isVenvSettingUp && (
+            <div className="flex items-center text-xs text-muted-foreground mr-2">
+              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+              Setting up environment…
+            </div>
+          )}
           <Button
             size="sm"
             onClick={handleRunAll}
-            // Enabled regardless; underlying runAll can safely no-op if no blocks
+            disabled={!isReady && !isRunning}
             className={
               isRunning
                 ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 transition-all duration-200"
@@ -155,7 +171,11 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
               </>
             ) : (
               <>
-                <Play className="w-4 h-4 mr-1" />
+                {isReady ? (
+                  <Play className="w-4 h-4 mr-1" />
+                ) : (
+                  <Lock className="w-4 h-4 mr-1" />
+                )}
                 Run All
               </>
             )}
@@ -165,7 +185,8 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
             size="sm"
             variant="outline"
             onClick={handleSaveMilestone}
-            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80"
+            disabled={!isReady}
+            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80 disabled:opacity-60"
           >
             <Save className="w-4 h-4 mr-1" />
             Save Milestone

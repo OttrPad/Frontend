@@ -11,12 +11,12 @@ const BASE_URL =
   import.meta.env.VITE_EXECUTION_BASE_URL || "http://localhost:4000";
 
 /**
- * Generic POST request helper for execution endpoints.
+ * Generic request helper for execution endpoints.
  * Throws with detailed message including status code and body text on failure.
  */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
+    method: options.method || "POST",
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
@@ -42,4 +42,11 @@ export async function execCode(roomId: string, code: string) {
 
 export async function stopExecution(roomId: string) {
   return request<{ status: string }>(`/api/execute/room/${roomId}/stop`);
+}
+
+export async function getExecutionStatus(roomId: string) {
+  return request<{ venv: string; container: string }>(
+    `/api/execute/room/${roomId}/status`,
+    { method: "GET" }
+  );
 }
