@@ -8,7 +8,13 @@ import { useRunStore, useBlocksStore } from "../store/workspace";
 
 export function useExecution(roomId: string) {
   const { blocks, updateBlock } = useBlocksStore();
-  const { addOutput, updateOutput, setIsRunning, isRunning } = useRunStore();
+  const {
+    addOutput,
+    updateOutput,
+    setIsRunning,
+    isRunning,
+    setContainerAlive,
+  } = useRunStore();
 
   const assembleCode = useCallback(() => {
     return [...blocks]
@@ -21,6 +27,8 @@ export function useExecution(roomId: string) {
     async (code: string): Promise<string> => {
       try {
         const { output } = await execCode(roomId, code);
+        // If exec succeeded, container/session is alive
+        setContainerAlive(roomId, true);
         return output;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -31,12 +39,13 @@ export function useExecution(roomId: string) {
         ) {
           await startExecution(roomId);
           const { output } = await execCode(roomId, code);
+          setContainerAlive(roomId, true);
           return output;
         }
         throw err;
       }
     },
-    [roomId]
+    [roomId, setContainerAlive]
   );
 
   const runAll = useCallback(async () => {
@@ -78,7 +87,7 @@ export function useExecution(roomId: string) {
       updateBlock(blockId, { isRunning: true, output: "", error: "" });
       const runningId = addOutput({
         blockId,
-        command: `run block ${blockId.slice(0, 8)}`,
+        command: `run ${blockId}`,
         status: "running",
         output: "",
       });
@@ -110,8 +119,10 @@ export function useExecution(roomId: string) {
       await stopExecution(roomId);
     } finally {
       setIsRunning(false);
+      // Mark as not alive after an explicit stop
+      setContainerAlive(roomId, false);
     }
-  }, [roomId, setIsRunning]);
+  }, [roomId, setIsRunning, setContainerAlive]);
 
   return { runAll, runSingle, stop, isRunning };
 }
