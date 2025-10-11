@@ -23,14 +23,17 @@ import type { Monaco } from "@monaco-editor/react";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
+import { apiClient } from "../../lib/apiClient";
+interface OptimizedNotebookAreaProps {
+  roomId: string;
+}
 
-export function OptimizedNotebookArea() {
+export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   const { blocks, updateBlock } = useBlocksStore();
 
   const { activeNotebookId } = useCollaboration();
   const { createBlockAt /*, deleteBlock*/ } =
     useRealtimeBlocks(activeNotebookId);
-
   const [isDragging, setIsDragging] = useState(false);
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [monaco, setMonaco] = useState<Monaco | null>(null);
@@ -47,6 +50,42 @@ export function OptimizedNotebookArea() {
   // Mark when we intentionally trigger a structural change (create/move)
   const lastStructuralChangeRef = useRef<number>(0);
 
+  // Visible workspace packages for the room
+  const [workspacePackages, setWorkspacePackages] = useState<string[] | null>(
+    null
+  );
+
+  // Fetch workspace requirements using /api/workspaces/{id}
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const roomsResp = await apiClient.getAllRooms();
+        const target = roomsResp.rooms?.find(
+          (r) => r.room_code === roomId || String(r.room_id) === roomId
+        );
+        const wsId = target?.workspace_id;
+        if (wsId === undefined || wsId === null) {
+          if (mounted) setWorkspacePackages([]);
+          return;
+        }
+        const wsResp = await apiClient.getWorkspaceById(wsId);
+        const req = wsResp.workspace?.requirements || "";
+        const parsed = req
+          .split(/\r?\n|,/) // newline or comma separated
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && !s.startsWith("#"))
+          .map((s) => s.replace(/\s+#.*$/, "")) // strip inline comments
+          .filter((s) => s.length > 0);
+        if (mounted) setWorkspacePackages(parsed);
+      } catch {
+        if (mounted) setWorkspacePackages([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [roomId]);
   // Keep the cache up to date with any non-empty content we see
   useEffect(() => {
     for (const b of blocks) {
@@ -285,7 +324,42 @@ export function OptimizedNotebookArea() {
       {/* Header */}
       <div className="flex-shrink-0 p-4 border-b border-border bg-card/30 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Notebook</h2>
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-lg font-semibold text-foreground">Notebook</h2>
+            {workspacePackages && (
+              <div
+                className="flex items-center gap-1 flex-wrap max-w-[50vw]"
+                aria-label="Workspace packages"
+                title={
+                  workspacePackages.length > 0
+                    ? `Packages: ${workspacePackages.join(", ")}`
+                    : "No packages specified"
+                }
+              >
+                {workspacePackages.length === 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground border border-border">
+                    No packages
+                  </span>
+                ) : (
+                  <>
+                    {workspacePackages.slice(0, 6).map((p) => (
+                      <span
+                        key={p}
+                        className="px-2 py-0.5 rounded-full text-[10px] bg-orange-500/15 text-orange-300 border border-orange-500/30"
+                      >
+                        {p}
+                      </span>
+                    ))}
+                    {workspacePackages.length > 6 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-orange-500/10 text-orange-200 border border-orange-500/20">
+                        +{workspacePackages.length - 6} more
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             <span className="text-xs text-muted-foreground">
               {blocks.length} blocks
