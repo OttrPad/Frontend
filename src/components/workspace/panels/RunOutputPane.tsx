@@ -80,11 +80,13 @@ export function RunOutputPane() {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center space-x-2">
                     {getStatusIcon(output.status)}
-                    <span className="text-gray-400">
-                      {output.blockId
-                        ? `Block ${output.blockId.slice(0, 8)}`
-                        : "Terminal"}
-                    </span>
+                    {output.blockId ? (
+                      <span className="text-gray-400" title={output.blockId}>
+                        Block
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">Terminal</span>
+                    )}
                     <span className="text-gray-500">•</span>
                     <span className="text-gray-500 flex items-center space-x-1">
                       <Clock className="w-3 h-3" />

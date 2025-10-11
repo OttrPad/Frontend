@@ -76,6 +76,9 @@ interface RunState {
   clearOutputs: () => void;
   updateOutput: (id: string, updates: Partial<RunOutput>) => void;
   setIsRunning: (running: boolean) => void;
+  // in-memory container state (not persisted)
+  containerAlive: Record<string, boolean>;
+  setContainerAlive: (roomId: string, alive: boolean) => void;
   // executionStarted removed (stateless exec model)
 }
 
@@ -462,6 +465,7 @@ export const useRunStore = create<RunState>()(
     (set) => ({
       outputs: [],
       isRunning: false,
+      containerAlive: {},
 
       addOutput: (output) => {
         const newOutput: RunOutput = {
@@ -488,6 +492,10 @@ export const useRunStore = create<RunState>()(
         }));
       },
       setIsRunning: (running) => set({ isRunning: running }),
+      setContainerAlive: (roomId, alive) =>
+        set((state) => ({
+          containerAlive: { ...state.containerAlive, [roomId]: alive },
+        })),
     }),
     { name: "run-store" }
   )
@@ -923,7 +931,22 @@ export const useAppStore = create<AppState>()(
       setCurrentRoom: (roomId) => {
         // Normalize and set currentRoom synchronously
         const normalized = roomId == null ? null : String(roomId);
+        const prevRoom = useAppStore.getState().currentRoom;
         set({ currentRoom: normalized });
+        // Clear run outputs whenever leaving a room or switching rooms (including re-selecting same after auth refresh)
+        if (
+          normalized === null || // leaving
+          (prevRoom && normalized && prevRoom !== normalized) || // switching
+          (normalized && normalized === prevRoom) // same room re-set (e.g., after re-login)
+        ) {
+          try {
+            const runStore = useRunStore.getState();
+            runStore.clearOutputs();
+            runStore.setIsRunning(false);
+          } catch (e) {
+            console.warn("Failed to clear run outputs on room change", e);
+          }
+        }
 
         // Perform socket lifecycle actions asynchronously
         queueMicrotask(async () => {
@@ -960,6 +983,17 @@ export const useAppStore = create<AppState>()(
             if (next && prev !== next) {
               sockAny.__lastJoinedRoom = next;
               sockAny.emit("join-room", { roomId: next });
+              // Proactively start execution container for this room; backend returns 200 if already started
+              try {
+                const execMod = await import("../lib/codeExecutionClient");
+                const { startExecution } = execMod;
+                await startExecution(next);
+                // Mark container alive in-memory
+                const runStore = useRunStore.getState();
+                runStore.setContainerAlive(next, true);
+              } catch (e) {
+                console.warn("Failed to start execution container on join", e);
+              }
               // s.emit("request-chat-history", { roomId: next });
             }
           } catch (e) {
