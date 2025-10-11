@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import {
   Play,
-  Plus,
   Save,
   Settings,
   Share2,
@@ -15,11 +14,7 @@ import {
   PanelRightOpen,
   LogOut,
 } from "lucide-react";
-import {
-  useAppStore,
-  useBlocksStore,
-  useMilestonesStore,
-} from "../../store/workspace";
+import { useAppStore, useMilestonesStore } from "../../store/workspace";
 import { useExecution } from "../../hooks/useExecution";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
@@ -32,7 +27,6 @@ interface EditorTopbarProps {
 export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const { theme, toggleTheme, toggleLeftSidebar, toggleRightSidebar } =
     useAppStore();
-  const { addBlock, blocks } = useBlocksStore();
   const { saveMilestone } = useMilestonesStore();
   const { runAll, isRunning, stop } = useExecution(roomId);
   const navigate = useNavigate();
@@ -60,6 +54,8 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSettingsMenu]);
 
+  // Workspace info is shown directly in Notebook header now; remove fetch here.
+
   const handleSettingsClick = (event: React.MouseEvent) => {
     const button = event.currentTarget as HTMLElement;
     const rect = button.getBoundingClientRect();
@@ -86,9 +82,9 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
     runAll();
   };
 
-  const handleAddBlock = () => {
-    addBlock();
-  };
+  // const handleAddBlock = () => {
+  //   addBlock();
+  // };
 
   const handleSaveMilestone = () => {
     setShowSaveDialog(true);
@@ -132,7 +128,7 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
 
         {/* Center Section - Actions */}
         <div className="flex items-center space-x-2">
-          <Button
+          {/* <Button
             size="sm"
             variant="outline"
             onClick={handleAddBlock}
@@ -140,12 +136,12 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
           >
             <Plus className="w-4 h-4 mr-1" />
             Add Block
-          </Button>
+          </Button> */}
 
           <Button
             size="sm"
             onClick={handleRunAll}
-            disabled={blocks.length === 0}
+            // Enabled regardless; underlying runAll can safely no-op if no blocks
             className={
               isRunning
                 ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 transition-all duration-200"
@@ -180,6 +176,22 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
         <div className="flex items-center space-x-3">
           {/* Presence Avatars */}
           <PresenceAvatars roomId={roomId} />
+
+          {/* Workspace info */}
+          {/* <Button
+            size="sm"
+            variant="ghost"
+            className="text-foreground/60 hover:text-foreground hover:bg-accent"
+            title={
+              workspaceInfo
+                ? `Workspace: ${workspaceInfo.name || "Unknown"} — Packages: ${
+                    workspaceInfo.requirements || "None"
+                  }`
+                : "Workspace info not available"
+            }
+          >
+            <Info className="w-4 h-4" />
+          </Button> */}
 
           {/* Share Button */}
           <Button

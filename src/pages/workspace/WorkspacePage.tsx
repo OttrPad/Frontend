@@ -422,7 +422,7 @@ export default function WorkspacePage() {
 
             {/* Notebook Area */}
             <div className="flex-1 min-w-0 bg-background backdrop-blur-sm">
-              <OptimizedNotebookArea />
+              <OptimizedNotebookArea roomId={roomIdentifier} />
             </div>
 
             {/* Right Panel */}

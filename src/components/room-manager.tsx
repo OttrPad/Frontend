@@ -4,134 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient, type Room, ApiRequestError } from "@/lib/apiClient";
+import {
+  apiClient,
+  type Room,
+  ApiRequestError,
+  type WorkspaceSummary,
+} from "@/lib/apiClient";
 import { toast } from "react-toastify";
 
 interface ExtendedRoom extends Room {
   room_code?: string;
   original_room_id?: number;
+  workspace_id?: number;
 }
 
 /** ---- Mock templates (UI-only for now) ---- */
-type TemplateKey = "data-analysis" | "ml-starter" | "web-scraping" | "viz";
-
-const TEMPLATES: Array<{
-  key: TemplateKey;
-  name: string;
-  tagline: string;
-  packages: string[];
-  accentFrom: string; // tailwind color utility
-  accentTo: string; // tailwind color utility
-  icon: React.ReactElement;
-}> = [
-  {
-    key: "data-analysis",
-    name: "Data Analysis",
-    tagline: "Preinstalled: numpy, pandas",
-    packages: ["numpy", "pandas"],
-    accentFrom: "from-emerald-400/20",
-    accentTo: "to-emerald-500/20",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M3 3v18h18"
-        />
-        <rect x="6" y="10" width="3" height="6" rx="1" strokeWidth={2} />
-        <rect x="11" y="6" width="3" height="10" rx="1" strokeWidth={2} />
-        <rect x="16" y="12" width="3" height="4" rx="1" strokeWidth={2} />
-      </svg>
-    ),
-  },
-  {
-    key: "ml-starter",
-    name: "ML Starter",
-    tagline: "Preinstalled: scikit-learn, numpy",
-    packages: ["scikit-learn", "numpy"],
-    accentFrom: "from-sky-400/20",
-    accentTo: "to-sky-500/20",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M12 6v12m6-6H6"
-        />
-      </svg>
-    ),
-  },
-  {
-    key: "web-scraping",
-    name: "Web Scraping",
-    tagline: "Preinstalled: requests, BeautifulSoup",
-    packages: ["requests", "beautifulsoup4"],
-    accentFrom: "from-fuchsia-400/20",
-    accentTo: "to-fuchsia-500/20",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M8 4h8l4 4v8l-4 4H8l-4-4V8l4-4z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9 9h6M9 13h6"
-        />
-      </svg>
-    ),
-  },
-  {
-    key: "viz",
-    name: "Visualization",
-    tagline: "Preinstalled: matplotlib, seaborn",
-    packages: ["matplotlib", "seaborn"],
-    accentFrom: "from-orange-400/20",
-    accentTo: "to-orange-500/20",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M3 3v18h18"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M6 16l3-3 3 2 4-6 2 3"
-        />
-      </svg>
-    ),
-  },
-];
+// Workspaces fetched from API
 
 export function RoomManager() {
   const navigate = useNavigate();
@@ -143,8 +31,9 @@ export function RoomManager() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey | null>(
-    "data-analysis"
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(
+    null
   );
 
   const [formErrors, setFormErrors] = useState<{
@@ -156,6 +45,11 @@ export function RoomManager() {
 
   useEffect(() => {
     fetchRooms();
+  }, []);
+
+  useEffect(() => {
+    fetchWorkspaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchRooms = async () => {
@@ -173,6 +67,7 @@ export function RoomManager() {
           created_by: room.created_by,
           updated_at: room.created_at,
           original_room_id: room.room_id,
+          workspace_id: room.workspace_id,
         }));
         setRooms(mappedRooms);
       } else {
@@ -204,6 +99,21 @@ export function RoomManager() {
       setRooms([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchWorkspaces = async () => {
+    try {
+      const resp = await apiClient.getWorkspaces({ limit: 50, offset: 0 });
+      const list = Array.isArray(resp.workspaces) ? resp.workspaces : [];
+      setWorkspaces(list);
+      // Preselect first workspace if none chosen
+      if (list.length > 0 && selectedWorkspaceId == null) {
+        setSelectedWorkspaceId(list[0].workspace_id);
+      }
+    } catch (e) {
+      console.warn("Failed to load workspaces", e);
+      setWorkspaces([]);
     }
   };
 
@@ -256,7 +166,7 @@ export function RoomManager() {
     const errors: typeof formErrors = {};
     if (!newRoomName.trim()) errors.roomName = "Room name is required";
     if (!newRoomDesc.trim()) errors.roomDesc = "Room description is required";
-    if (!selectedTemplate) errors.template = "Please select a template";
+    if (!selectedWorkspaceId) errors.template = "Please select a workspace";
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -265,15 +175,15 @@ export function RoomManager() {
 
     try {
       setIsCreating(true);
-      // NOTE: backend doesn’t take template yet; this is UI-only mock
       const response = await apiClient.createRoom(
         newRoomName.trim(),
-        newRoomDesc.trim()
+        newRoomDesc.trim(),
+        selectedWorkspaceId ?? undefined
       );
 
-      const tpl = TEMPLATES.find((t) => t.key === selectedTemplate);
+      const ws = workspaces.find((w) => w.workspace_id === selectedWorkspaceId);
       toast.success(
-        `Room "${newRoomName}" created with template: ${tpl?.name}`
+        `Room "${newRoomName}" created with workspace: ${ws?.name ?? "Unknown"}`
       );
 
       setNewRoomName("");
@@ -591,41 +501,74 @@ export function RoomManager() {
                     )}
                   </div>
 
-                  {/* Template Picker (mock) */}
+                  {/* Workspace Picker (from API) */}
                   <div className="space-y-2">
-                    <Label className="text-white font-medium">Template</Label>
+                    <Label className="text-white font-medium">Workspace</Label>
                     <p className="text-xs text-white/50">
-                      Choose a starting environment for your first notebook
+                      Choose a starting environment for your room
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                      {TEMPLATES.map((tpl) => {
-                        const active = selectedTemplate === tpl.key;
+                      {workspaces.map((ws) => {
+                        const active = selectedWorkspaceId === ws.workspace_id;
                         return (
                           <button
-                            key={tpl.key}
+                            key={ws.workspace_id}
                             type="button"
                             onClick={() => {
-                              setSelectedTemplate(tpl.key);
+                              setSelectedWorkspaceId(ws.workspace_id);
                               setFormErrors((prev) => ({
                                 ...prev,
                                 template: undefined,
                               }));
                             }}
-                            className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-200
-                              bg-white/[0.03] backdrop-blur-md
-                              ${
-                                active
-                                  ? "border-orange-400/50 ring-2 ring-orange-400/30"
-                                  : "border-white/[0.08] hover:border-white/[0.12]"
-                              }
-                              hover:bg-white/[0.05]
-                            `}
+                            className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-200 bg-white/[0.03] backdrop-blur-md ${
+                              active
+                                ? "border-orange-400/50 ring-2 ring-orange-400/30"
+                                : "border-white/[0.08] hover:border-white/[0.12]"
+                            } hover:bg-white/[0.05]`}
                           >
-                            <div
-                              className={`w-10 h-10 rounded-lg flex items-center justify-center border ${tpl.accentFrom} ${tpl.accentTo} bg-gradient-to-br border-white/10 text-white`}
-                            >
-                              {tpl.icon}
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center border bg-gradient-to-br from-orange-400/20 to-orange-500/20 border-white/10 text-white">
+                              {/* generic app grid icon */}
+                              <svg
+                                className="w-6 h-6"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                              >
+                                <rect
+                                  x="3"
+                                  y="3"
+                                  width="7"
+                                  height="7"
+                                  rx="1.5"
+                                  strokeWidth={2}
+                                />
+                                <rect
+                                  x="14"
+                                  y="3"
+                                  width="7"
+                                  height="7"
+                                  rx="1.5"
+                                  strokeWidth={2}
+                                />
+                                <rect
+                                  x="3"
+                                  y="14"
+                                  width="7"
+                                  height="7"
+                                  rx="1.5"
+                                  strokeWidth={2}
+                                />
+                                <rect
+                                  x="14"
+                                  y="14"
+                                  width="7"
+                                  height="7"
+                                  rx="1.5"
+                                  strokeWidth={2}
+                                />
+                              </svg>
                             </div>
                             <div className="text-left">
                               <div className="flex items-center gap-2">
@@ -634,7 +577,7 @@ export function RoomManager() {
                                     active ? "text-orange-300" : "text-white"
                                   }`}
                                 >
-                                  {tpl.name}
+                                  {ws.name}
                                 </span>
                                 {active && (
                                   <span className="px-2 py-0.5 text-[10px] rounded bg-orange-500/20 text-orange-300 border border-orange-400/30">
@@ -643,10 +586,7 @@ export function RoomManager() {
                                 )}
                               </div>
                               <div className="text-xs text-white/60">
-                                {tpl.tagline}
-                              </div>
-                              <div className="mt-1 text-[11px] text-white/40">
-                                Packages: {tpl.packages.join(", ")}
+                                preinstalled : {ws.requirements || ""}
                               </div>
                             </div>
                           </button>
@@ -756,6 +696,7 @@ export function RoomManager() {
                               : `ID: ${room.id}`}
                           </span>
                           <span>•</span>
+                          {/* Workspace id hidden per requirement */}
                           <span>
                             Created{" "}
                             {new Date(room.created_at).toLocaleDateString()}

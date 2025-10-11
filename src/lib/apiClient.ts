@@ -1,9 +1,7 @@
 import supabase from "./supabaseClient";
 import { apiUrl } from "./constants";
 
-
-const API_BASE_URL = apiUrl
-
+const API_BASE_URL = apiUrl;
 
 // Types for API responses
 export interface Room {
@@ -46,6 +44,29 @@ export interface ServicesHealthResponse {
 export interface ApiError {
   error: string;
   message?: string;
+}
+
+// Workspaces types
+export interface WorkspaceSummary {
+  workspace_id: number;
+  name: string;
+  requirements: string | null;
+}
+
+export interface WorkspacesResponse {
+  message: string;
+  workspaces: WorkspaceSummary[];
+  total: number;
+  hasMore: boolean;
+}
+
+export interface WorkspaceDetailResponse {
+  message: string;
+  workspace: {
+    workspace_id: number;
+    name: string;
+    requirements: string | null;
+  };
 }
 
 // Custom error class for API errors
@@ -92,9 +113,7 @@ class ApiClient {
       ...options,
     };
 
-
-  const response = await fetch(`${this.baseUrl}${endpoint}`, config);
-
+    const response = await fetch(`${this.baseUrl}${endpoint}`, config);
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -123,7 +142,8 @@ class ApiClient {
   // Room API methods
   async createRoom(
     name: string,
-    description: string
+    description: string,
+    workspaceId?: number
   ): Promise<{
     message: string;
     room: {
@@ -139,9 +159,11 @@ class ApiClient {
       email: string;
     };
   }> {
+    const payload: Record<string, unknown> = { name, description };
+    if (typeof workspaceId === "number") payload.workspace_id = workspaceId;
     return this.request("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -154,6 +176,7 @@ class ApiClient {
       room_code: string;
       created_by: string;
       created_at: string;
+      workspace_id?: number;
       user_access: {
         is_member: boolean;
         is_creator: boolean;
@@ -355,6 +378,24 @@ class ApiClient {
     return this.request("/health/services");
   }
 
+  // Workspaces API method
+  async getWorkspaces(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<WorkspacesResponse> {
+    const limit = params?.limit ?? 50;
+    const offset = params?.offset ?? 0;
+    const qp = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request(`/api/workspaces?${qp.toString()}`);
+  }
+
+  async getWorkspaceById(id: number): Promise<WorkspaceDetailResponse> {
+    return this.request(`/api/workspaces/${id}`);
+  }
+
   // User profile methods
   async getUserProfile(): Promise<{
     message: string;
@@ -368,7 +409,10 @@ class ApiClient {
   }
 
   // AI generation method
-  async generateAiContent(prompt: string, options: Record<string, unknown> = {}): Promise<{
+  async generateAiContent(
+    prompt: string,
+    options: Record<string, unknown> = {}
+  ): Promise<{
     prompt: string;
     texts: string[];
     images: unknown[];
