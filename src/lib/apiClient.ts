@@ -48,6 +48,30 @@ export interface ApiError {
   message?: string;
 }
 
+export interface AiSuggestionRequest {
+  contextBefore: string;
+  contextAfter: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionItem {
+  text: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionResponse {
+  items?: AiSuggestionItem[];
+  suggestion?: string;
+}
+
 // Custom error class for API errors
 export class ApiRequestError extends Error {
   public errorCode: string;
@@ -92,8 +116,7 @@ class ApiClient {
       ...options,
     };
 
-
-  const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+    const response = await fetch(`${this.baseUrl}${endpoint}`, config);
 
 
     if (!response.ok) {
@@ -379,6 +402,17 @@ class ApiClient {
       body: JSON.stringify({ prompt, options }),
     });
   }
+
+  async getAiSuggestion(
+    payload: AiSuggestionRequest
+  ): Promise<AiSuggestionResponse> {
+    return this.request(`/api/ai/suggest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  
 }
 
 // Export singleton instance
