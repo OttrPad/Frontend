@@ -46,8 +46,7 @@ export interface ApiError {
   message?: string;
 }
 
-<<<<<<< HEAD
-// Workspaces types
+// Workspaces types (used by Rooms UI and workspace picker)
 export interface WorkspaceSummary {
   workspace_id: number;
   name: string;
@@ -70,7 +69,6 @@ export interface WorkspaceDetailResponse {
   };
 }
 
-=======
 export interface AiSuggestionRequest {
   contextBefore: string;
   contextAfter: string;
@@ -95,7 +93,6 @@ export interface AiSuggestionResponse {
   suggestion?: string;
 }
 
->>>>>>> 235d607a4c475163439c51c3385ef970a75c1c0d
 // Custom error class for API errors
 export class ApiRequestError extends Error {
   public errorCode: string;
@@ -141,10 +138,6 @@ class ApiClient {
     };
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, config);
-<<<<<<< HEAD
-=======
-
->>>>>>> 235d607a4c475163439c51c3385ef970a75c1c0d
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -463,8 +456,6 @@ class ApiClient {
       body: JSON.stringify(payload),
     });
   }
-
-  
 }
 
 // Export singleton instance
