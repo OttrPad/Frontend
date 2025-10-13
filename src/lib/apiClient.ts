@@ -46,6 +46,7 @@ export interface ApiError {
   message?: string;
 }
 
+<<<<<<< HEAD
 // Workspaces types
 export interface WorkspaceSummary {
   workspace_id: number;
@@ -69,6 +70,32 @@ export interface WorkspaceDetailResponse {
   };
 }
 
+=======
+export interface AiSuggestionRequest {
+  contextBefore: string;
+  contextAfter: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionItem {
+  text: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionResponse {
+  items?: AiSuggestionItem[];
+  suggestion?: string;
+}
+
+>>>>>>> 235d607a4c475163439c51c3385ef970a75c1c0d
 // Custom error class for API errors
 export class ApiRequestError extends Error {
   public errorCode: string;
@@ -114,6 +141,10 @@ class ApiClient {
     };
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 235d607a4c475163439c51c3385ef970a75c1c0d
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -423,6 +454,17 @@ class ApiClient {
       body: JSON.stringify({ prompt, options }),
     });
   }
+
+  async getAiSuggestion(
+    payload: AiSuggestionRequest
+  ): Promise<AiSuggestionResponse> {
+    return this.request(`/api/ai/suggest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  
 }
 
 // Export singleton instance
