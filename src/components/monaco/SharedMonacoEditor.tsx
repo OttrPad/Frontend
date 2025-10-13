@@ -6,6 +6,7 @@ import { MonacoBinding } from "y-monaco";
 import type { Block, Lang } from "../../types/workspace";
 import { useAppStore } from "../../store/workspace";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
+import { apiClient } from "../../lib/apiClient";
 
 interface ModelInfo {
   model: editor.ITextModel;
@@ -223,6 +224,7 @@ export function SharedMonacoEditor({
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const currentContentListenerRef = useRef<{ dispose(): void } | null>(null);
+  const inlineCompletionDisposableRef = useRef<{ dispose(): void } | null>(null);
 
   // Keep current binding so we can dispose when switching blocks/notebooks
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -311,6 +313,93 @@ export function SharedMonacoEditor({
 
       monacoInstance.editor.setTheme(
         theme === "dark" ? "ottrpad-dark" : "ottrpad-light"
+      );
+
+      inlineCompletionDisposableRef.current?.dispose();
+      inlineCompletionDisposableRef.current = monacoInstance.languages.registerInlineCompletionsProvider(
+        "python",
+        {
+          async provideInlineCompletions(model, position, _context, token) {
+            const textBefore = model.getValueInRange({
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            });
+
+            const textAfter = model.getValueInRange({
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: model.getLineCount(),
+              endColumn: model.getLineMaxColumn(model.getLineCount()),
+            });
+
+            const languageId = model.getLanguageId();
+
+            let cancellationRequested = token.isCancellationRequested;
+            let cancellationDisposable: { dispose(): void } | null = null;
+
+            try {
+              cancellationDisposable = token.onCancellationRequested(() => {
+                cancellationRequested = true;
+              });
+
+              if (cancellationRequested) {
+                return { items: [] };
+              }
+
+              const data = await apiClient.getAiSuggestion({
+                contextBefore: textBefore,
+                contextAfter: textAfter,
+                language: languageId,
+                cursor: {
+                  line: position.lineNumber,
+                  column: position.column,
+                },
+              });
+
+              if (cancellationRequested || token.isCancellationRequested) {
+                return { items: [] };
+              }
+
+              const suggestionTexts: string[] = [];
+
+              if (Array.isArray(data.items)) {
+                data.items.forEach((item) => {
+                  if (typeof item?.text === "string" && item.text.trim()) {
+                    suggestionTexts.push(item.text);
+                  }
+                });
+              }
+
+              if (!suggestionTexts.length && typeof data.suggestion === "string") {
+                suggestionTexts.push(data.suggestion);
+              }
+
+              if (!suggestionTexts.length) {
+                return { items: [] };
+              }
+
+              return {
+                items: suggestionTexts.map((text) => ({
+                  insertText: text,
+                  range: new monacoInstance.Range(
+                    position.lineNumber,
+                    position.column,
+                    position.lineNumber,
+                    position.column
+                  ),
+                })),
+              };
+            } catch (error) {
+              console.error("Inline suggestion failed", error);
+              return { items: [] };
+            } finally {
+              cancellationDisposable?.dispose();
+            }
+          },
+          freeInlineCompletions() {},
+        }
       );
 
       if (editorContainerRef.current) {
@@ -459,6 +548,7 @@ export function SharedMonacoEditor({
       modelManagerRef.current?.dispose();
       resizeObserverRef.current?.disconnect();
       bindingRef.current?.destroy();
+      inlineCompletionDisposableRef.current?.dispose();
     };
   }, []);
 
