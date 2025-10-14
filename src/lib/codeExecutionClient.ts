@@ -7,8 +7,7 @@
 // POST /api/execute/room/:roomId/exec  -> body { code } -> { output }
 // POST /api/execute/room/:roomId/stop  -> { status: "stopped" }
 
-const BASE_URL =
-  import.meta.env.VITE_EXECUTION_BASE_URL || "http://localhost:4000";
+import { apiUrl as BASE_URL } from "./constants";
 
 /**
  * Generic request helper for execution endpoints.
