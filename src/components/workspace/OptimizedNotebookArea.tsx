@@ -24,12 +24,14 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
 import { apiClient } from "../../lib/apiClient";
+import { useUser } from "../../hooks/useUser";
 interface OptimizedNotebookAreaProps {
   roomId: string;
 }
 
 export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   const { blocks, updateBlock } = useBlocksStore();
+  const { session } = useUser();
 
   const { activeNotebookId } = useCollaboration();
   const { createBlockAt /*, deleteBlock*/ } =
@@ -453,6 +455,8 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
                   onMonacoInit={handleMonacoInit}
                   height={editorPositionRef.current.height}
                   className="rounded-md overflow-hidden"
+                  userId={session?.user?.id}
+                  userEmail={session?.user?.email || ""}
                 />
               </div>
             )}
