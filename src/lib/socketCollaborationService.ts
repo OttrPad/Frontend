@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import io from "socket.io-client";
+import { apiUrl, socketUrl } from "./constants";
 import * as Y from "yjs";
 import {
   Awareness,
@@ -65,15 +66,11 @@ export class SocketCollaborationService {
   }
 
   private getApiBaseUrl(): string {
-    return process.env.NODE_ENV === "production"
-      ? "https://api.ottrpad.com"
-      : "http://localhost:4000";
+    return apiUrl;
   }
 
   private getSocketUrl(): string {
-    return process.env.NODE_ENV === "production"
-      ? "https://collab.ottrpad.com"
-      : "http://localhost:5002";
+    return socketUrl;
   }
 
   private setupEventHandlers() {
