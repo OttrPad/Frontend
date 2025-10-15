@@ -21,9 +21,13 @@ const rawSocketUrl = import.meta.env.VITE_SOCKET_URL as string | undefined;
 export const socketUrl = (() => {
   if (import.meta.env.PROD) {
     if (!rawSocketUrl) return ""; // same-origin
-    if (rawSocketUrl.startsWith("https://")) return rawSocketUrl;
+    if (
+      rawSocketUrl.startsWith("https://") ||
+      rawSocketUrl.startsWith("wss://")
+    )
+      return rawSocketUrl;
     if (rawSocketUrl.startsWith("/")) return ""; // treat as same-origin path
-    return ""; // ignore http:// in production to prevent mixed content
+    return ""; // ignore http:// and ws:// in production to prevent mixed content
   }
   return rawSocketUrl ?? "";
 })();
