@@ -1,7 +1,6 @@
 import { useAppStore } from "../../store/workspace";
 import { NotebookSidebar } from "./NotebookSidebar";
 import { UsersPane } from "./panels/UsersPane";
-import { TestsPane } from "./panels/TestsPane";
 import { VersionsPane } from "./panels/VersionsPane";
 import { AIAssistPane } from "./panels/AIAssistPane";
 import { ChatPane } from "./panels/ChatPane";
@@ -17,12 +16,6 @@ export function LeftSidebar() {
         return (
           <div className="h-full">
             <UsersPane roomId={currentRoom || ""} />
-          </div>
-        );
-      case "tests":
-        return (
-          <div className="h-full">
-            <TestsPane />
           </div>
         );
       case "versions":
