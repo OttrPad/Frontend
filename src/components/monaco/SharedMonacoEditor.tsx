@@ -534,9 +534,14 @@ export function SharedMonacoEditor({
     const model = editor.getModel();
     if (!model) return;
 
+    const latestFromY = ytext.toString();
+    if (model.getValue() !== latestFromY) {
+      model.setValue(latestFromY);
+    }
+
     // Dispose previous binding first
     bindingRef.current?.destroy();
-    bindingRef.current = null;
+    // bindingRef.current = null;
 
     // Generate consistent color for this user
     const palette = [

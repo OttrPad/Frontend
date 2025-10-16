@@ -47,10 +47,6 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   });
 
   // --- Content preservation shield -----------------------------------------
-  // Cache last known non-empty content for existing blocks.
-  const contentCacheRef = useRef<Map<string, string>>(new Map());
-  // Mark when we intentionally trigger a structural change (create/move)
-  const lastStructuralChangeRef = useRef<number>(0);
 
   // Visible workspace packages for the room
   const [workspacePackages, setWorkspacePackages] = useState<string[] | null>(
@@ -88,39 +84,7 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
       mounted = false;
     };
   }, [roomId]);
-  // Keep the cache up to date with any non-empty content we see
-  useEffect(() => {
-    for (const b of blocks) {
-      if (typeof b.content === "string" && b.content.length > 0) {
-        contentCacheRef.current.set(b.id, b.content);
-      }
-    }
-  }, [blocks]);
 
-  // If a structural change happened recently and we see existing blocks
-  // suddenly emptied, restore them from the cache (best-effort).
-  useEffect(() => {
-    const since = Date.now() - lastStructuralChangeRef.current;
-    if (since > 2000) return; // only intervene right after add/move
-
-    const toRestore: Array<{ id: string; content: string }> = [];
-    for (const b of blocks) {
-      const cached = contentCacheRef.current.get(b.id);
-      if (
-        cached &&
-        cached.length > 0 &&
-        (b.content == null || b.content.length === 0)
-      ) {
-        toRestore.push({ id: b.id, content: cached });
-      }
-    }
-    if (toRestore.length > 0) {
-      // batch restore
-      for (const r of toRestore) {
-        updateBlock(r.id, { content: r.content });
-      }
-    }
-  }, [blocks, updateBlock]);
   // --------------------------------------------------------------------------
 
   // Virtualization for performance
@@ -145,9 +109,6 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
       const newIndex = blocks.findIndex((b) => b.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Mark structural change (so we can protect content briefly)
-      lastStructuralChangeRef.current = Date.now();
-
       try {
         await socketCollaborationService.moveBlock(
           activeNotebookId,
@@ -164,14 +125,6 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   const handleAddBlock = useCallback(() => {
     if (!activeNotebookId) return;
 
-    // Snapshot content before structural change
-    lastStructuralChangeRef.current = Date.now();
-    for (const b of blocks) {
-      if (b.content && b.content.length > 0) {
-        contentCacheRef.current.set(b.id, b.content);
-      }
-    }
-
     const position = blocks.length; // append
     createBlockAt(position, "code", "python").catch((e) =>
       console.error("Failed to create block:", e)
@@ -182,19 +135,11 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
     (position: number) => {
       if (!activeNotebookId) return;
 
-      // Snapshot content before structural change
-      lastStructuralChangeRef.current = Date.now();
-      for (const b of blocks) {
-        if (b.content && b.content.length > 0) {
-          contentCacheRef.current.set(b.id, b.content);
-        }
-      }
-
       createBlockAt(position, "code", "python").catch((e) =>
         console.error("Failed to create block:", e)
       );
     },
-    [activeNotebookId, blocks, createBlockAt]
+    [activeNotebookId, createBlockAt]
   );
 
   const handleBlockFocus = useCallback((blockId: string) => {
@@ -205,10 +150,7 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
     (blockId: string, content: string) => {
       // Local UI update for snappy typing
       updateBlock(blockId, { content });
-      // Keep cache fresh too
-      if (content && content.length > 0) {
-        contentCacheRef.current.set(blockId, content);
-      }
+
       // (Your YJS/socket emission should happen elsewhere in your pipeline)
     },
     [updateBlock]

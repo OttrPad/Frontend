@@ -2,7 +2,6 @@ import React from "react";
 import { useAppStore } from "../../store/workspace";
 import {
   Users,
-  TestTube,
   GitBranch,
   Bot,
   BookOpen,
@@ -32,12 +31,6 @@ const activities: ActivityItem[] = [
     icon: Users,
     label: "Users",
     tooltip: "Room Users & Access",
-  },
-  {
-    id: "tests",
-    icon: TestTube,
-    label: "Tests",
-    tooltip: "Test Explorer",
   },
   {
     id: "versions",
