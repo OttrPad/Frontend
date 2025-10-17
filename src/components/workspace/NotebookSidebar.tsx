@@ -82,9 +82,17 @@ export function NotebookSidebar() {
   const handleNewNotebook = useCallback(async () => {
     const name = `Notebook ${Date.now()}`;
     try {
-      await createNotebook(name);
+      const newNotebook = await createNotebook(name);
+      // Send the new notebook data to the backend RoomController
+      await fetch("/api/roomcontroller/addNotebook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ notebook: newNotebook }),
+      });
     } catch (err) {
-      console.error("Failed to create notebook:", err);
+      console.error("Failed to create notebook or sync with backend:", err);
     } finally {
       setContextMenu(null);
     }
@@ -102,9 +110,19 @@ export function NotebookSidebar() {
   const handleDeleteConfirm = async () => {
     if (!deleteDialog) return;
     try {
-      await deleteNotebook(deleteDialog.notebookId);
+      await deleteNotebook(deleteDialog.notebookId); // Frontend logic for deleting a notebook
+  
+      // Send the notebook ID to the backend to delete it
+      await fetch("/api/roomcontroller/deleteNotebook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ notebookId: deleteDialog.notebookId }),
+      });
+  
     } catch (err) {
-      console.error("Failed to delete notebook:", err);
+      console.error("Failed to delete notebook or sync with backend:", err);
     }
     setDeleteDialog(null);
   };
@@ -112,9 +130,22 @@ export function NotebookSidebar() {
   const handleRenameConfirm = async (newName: string) => {
     if (!renameDialog) return;
     try {
-      await renameNotebook(renameDialog.notebookId, newName);
+      await renameNotebook(renameDialog.notebookId, newName); // Frontend logic for renaming a notebook
+  
+      // Send the updated notebook name to the backend
+      await fetch("/api/roomcontroller/renameNotebook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          notebookId: renameDialog.notebookId,
+          newName: newName,
+        }),
+      });
+  
     } catch (err) {
-      console.error("Failed to rename notebook:", err);
+      console.error("Failed to rename notebook or sync with backend:", err);
     }
     setRenameDialog(null);
   };

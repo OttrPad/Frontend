@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import {
   Play,
-  Save,
   Settings,
   Share2,
   Moon,
@@ -15,12 +14,15 @@ import {
   LogOut,
   Loader2,
   Lock,
+  GitCommit,
+  GitBranch,
 } from "lucide-react";
 import { useAppStore, useMilestonesStore } from "../../store/workspace";
 import { useExecution } from "../../hooks/useExecution";
 import { useExecutionStatus } from "../../hooks/useExecutionStatus";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
+import { CommitDialog } from "../modals/CommitDialog";
 import { toast } from "react-toastify";
 
 interface EditorTopbarProps {
@@ -30,10 +32,12 @@ interface EditorTopbarProps {
 export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const { theme, toggleTheme, toggleLeftSidebar, toggleRightSidebar } =
     useAppStore();
-  const { saveMilestone } = useMilestonesStore();
+  const { saveMilestone, createCommit } = useMilestonesStore();
   const { runAll, isRunning, stop } = useExecution(roomId);
   const navigate = useNavigate();
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  const [showMilestoneDialog, setShowMilestoneDialog] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const { isReady, isVenvSettingUp } = useExecutionStatus(roomId);
@@ -97,12 +101,35 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
   // };
 
   const handleSaveMilestone = () => {
-    setShowSaveDialog(true);
+    setShowMilestoneDialog(true);
+  };
+
+  const handleCommit = () => {
+    setShowCommitDialog(true);
+  };
+
+  const handleCreateCommit = async (message: string) => {
+    try {
+      const notebookId = `notebook-${roomId}-default`;
+      await createCommit(roomId, notebookId, message);
+      toast.success("Commit created successfully!");
+    } catch {
+      toast.error("Failed to create commit");
+    }
+  };
+
+  const handleCreateMilestone = async (message: string) => {
+    try {
+      await saveMilestone(roomId, message);
+      toast.success("Milestone created successfully!");
+    } catch {
+      toast.error("Failed to create milestone");
+    }
   };
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
-    // You could add a toast notification here
+    toast.success("Room link copied to clipboard!");
   };
 
   return (
@@ -184,12 +211,23 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
           <Button
             size="sm"
             variant="outline"
+            onClick={handleCommit}
+            disabled={!isReady}
+            className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80 disabled:opacity-60"
+          >
+            <GitCommit className="w-4 h-4 mr-1" />
+            Commit
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handleSaveMilestone}
             disabled={!isReady}
             className="bg-secondary border-border text-secondary-foreground hover:bg-secondary/80 disabled:opacity-60"
           >
-            <Save className="w-4 h-4 mr-1" />
-            Save Milestone
+            <GitBranch className="w-4 h-4 mr-1" />
+            Milestone
           </Button>
         </div>
 
@@ -290,12 +328,28 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
         </div>
       </div>
 
-      {/* Save Milestone Dialog */}
+      {/* Commit Dialog */}
+      <CommitDialog
+        isOpen={showCommitDialog}
+        onClose={() => setShowCommitDialog(false)}
+        onCommit={handleCreateCommit}
+        isMilestone={false}
+      />
+
+      {/* Milestone Dialog */}
+      <CommitDialog
+        isOpen={showMilestoneDialog}
+        onClose={() => setShowMilestoneDialog(false)}
+        onCommit={handleCreateMilestone}
+        isMilestone={true}
+      />
+
+      {/* Legacy Save Milestone Dialog (can be removed if not used) */}
       <SaveMilestoneDialog
         open={showSaveDialog}
         onOpenChange={setShowSaveDialog}
         onSave={(name: string, notes?: string) => {
-          saveMilestone(name, notes);
+          saveMilestone(roomId, name, notes || "");
           setShowSaveDialog(false);
         }}
       />

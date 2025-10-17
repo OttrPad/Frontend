@@ -2,16 +2,15 @@ import React from "react";
 import { useAppStore } from "../../store/workspace";
 import {
   Users,
-  TestTube,
   GitBranch,
   Bot,
   BookOpen,
-  Terminal,
   MessageSquare,
+  Terminal,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-type ActivityType = "files" | "users" | "tests" | "versions" | "ai" | "chat";
+type ActivityType = "files" | "users" | "versions" | "ai" | "chat";
 
 interface ActivityItem {
   id: ActivityType;
@@ -32,12 +31,6 @@ const activities: ActivityItem[] = [
     icon: Users,
     label: "Users",
     tooltip: "Room Users & Access",
-  },
-  {
-    id: "tests",
-    icon: TestTube,
-    label: "Tests",
-    tooltip: "Test Explorer",
   },
   {
     id: "versions",
