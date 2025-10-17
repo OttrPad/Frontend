@@ -3,6 +3,7 @@ import { useParams, Navigate } from "react-router-dom";
 import { useAppStore, usePresenceStore } from "../../store/workspace";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useUser } from "../../hooks/useUser";
+import { useResponsive } from "../../hooks/useResponsive";
 import { EditorTopbar } from "../../components/workspace/EditorTopbar";
 import { ActivityBar } from "../../components/workspace/ActivityBar";
 import { LeftSidebar } from "../../components/workspace/LeftSidebar";
@@ -62,6 +63,9 @@ export default function WorkspacePage() {
   } = useAppStore();
   const { setCurrentUser } = usePresenceStore();
 
+  // Responsive breakpoint detection
+  const { isMobile, isTablet } = useResponsive();
+
   // Get the actual room identifier (either roomId or roomCode)
   const roomIdentifier = roomId || roomCode;
 
@@ -82,12 +86,27 @@ export default function WorkspacePage() {
   const ROOM_ACCESS_CACHE_TIMEOUT = 10 * 60 * 1000;
 
   // Enable keyboard shortcuts
-  const { showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts();
+  const { showShortcutsModal, setShowShortcutsModal } = useKeyboardShortcuts(roomIdentifier);
 
   // Determine if current activity needs fixed width
   const needsFixedWidth =
     activeActivity === "users" || activeActivity === "versions";
-  const currentSidebarWidth = needsFixedWidth ? 450 : sidebarWidth;
+  
+  // Calculate responsive widths based on screen size
+  const getResponsiveSidebarWidth = (baseWidth: number): string | number => {
+    if (isMobile) return '85vw'; // Mobile: Full-width overlay
+    if (isTablet) return '35%'; // Tablet: Percentage-based
+    return baseWidth; // Desktop: Fixed pixels
+  };
+
+  const getResponsiveRightPanelWidth = (): string | number => {
+    if (isMobile) return '85vw'; // Mobile: Full-width overlay
+    if (isTablet) return '40%'; // Tablet: Percentage-based
+    return rightPanelWidth; // Desktop: Fixed pixels
+  };
+
+  const currentSidebarWidth = needsFixedWidth ? 450 : getResponsiveSidebarWidth(sidebarWidth);
+  const currentRightPanelWidth = getResponsiveRightPanelWidth();
 
   // Resize state
   const [isResizing, setIsResizing] = useState(false);
@@ -147,6 +166,19 @@ export default function WorkspacePage() {
       };
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  // Auto-collapse sidebars on mobile and tablet for better UX
+  useEffect(() => {
+    if ((isMobile || isTablet) && (!isLeftSidebarCollapsed || !isRightSidebarCollapsed)) {
+      // Collapse both sidebars on mobile/tablet for more editor space
+      // Use Zustand's set directly to update state
+      useAppStore.setState({
+        isLeftSidebarCollapsed: true,
+        isRightSidebarCollapsed: true,
+      });
+    }
+    // Note: We don't auto-expand on desktop to preserve user preference
+  }, [isMobile, isTablet, isLeftSidebarCollapsed, isRightSidebarCollapsed]);
 
   useEffect(() => {
     if (roomIdentifier) {
@@ -404,14 +436,25 @@ export default function WorkspacePage() {
             {/* Left Sidebar */}
             {!isLeftSidebarCollapsed && (
               <>
+                {/* Mobile/Tablet: Backdrop overlay */}
+                {(isMobile || isTablet) && (
+                  <div
+                    className="fixed inset-0 bg-black/50 z-40 animate-in fade-in duration-200"
+                    onClick={() => useAppStore.setState({ isLeftSidebarCollapsed: true })}
+                  />
+                )}
                 <div
-                  className="flex-shrink-0 border-r border-border bg-card/40 backdrop-blur-xl z-50"
+                  className={`flex-shrink-0 border-r border-border bg-card/40 backdrop-blur-xl ${
+                    isMobile || isTablet
+                      ? 'fixed left-0 top-0 bottom-0 z-50 animate-in slide-in-from-left duration-300'
+                      : 'z-50'
+                  }`}
                   style={{ width: currentSidebarWidth }}
                 >
                   <LeftSidebar />
                 </div>
-                {/* Left Resize Handle - only show for files, tests, and ai panels */}
-                {!needsFixedWidth && (
+                {/* Left Resize Handle - only show for files, tests, and ai panels on desktop */}
+                {!needsFixedWidth && !isMobile && !isTablet && (
                   <div
                     className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
                     onMouseDown={handleMouseDown("left")}
@@ -428,14 +471,27 @@ export default function WorkspacePage() {
             {/* Right Panel */}
             {!isRightSidebarCollapsed && rightPanelWidth > 0 && (
               <>
-                {/* Right Resize Handle */}
+                {/* Mobile/Tablet: Backdrop overlay */}
+                {(isMobile || isTablet) && (
+                  <div
+                    className="fixed inset-0 bg-black/50 z-40 animate-in fade-in duration-200"
+                    onClick={() => useAppStore.setState({ isRightSidebarCollapsed: true })}
+                  />
+                )}
+                {/* Right Resize Handle - hide on mobile/tablet */}
+                {!isMobile && !isTablet && (
+                  <div
+                    className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
+                    onMouseDown={handleMouseDown("right")}
+                  />
+                )}
                 <div
-                  className="w-1 bg-border hover:bg-orange-400 cursor-col-resize transition-colors"
-                  onMouseDown={handleMouseDown("right")}
-                />
-                <div
-                  className="flex-shrink-0 border-l border-border bg-card/40 backdrop-blur-xl"
-                  style={{ width: rightPanelWidth }}
+                  className={`flex-shrink-0 border-l border-border bg-card/40 backdrop-blur-xl ${
+                    isMobile || isTablet
+                      ? 'fixed right-0 top-0 bottom-0 z-50 animate-in slide-in-from-right duration-300'
+                      : ''
+                  }`}
+                  style={{ width: currentRightPanelWidth }}
                 >
                   <RightPanel />
                 </div>

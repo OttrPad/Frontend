@@ -7,7 +7,8 @@ interface DialogProps {
   children: React.ReactNode;
 }
 
-const Dialog: React.FC<DialogProps> = ({ children }) => {
+const Dialog: React.FC<DialogProps> = ({ open, children }) => {
+  if (!open) return null;
   return <>{children}</>;
 };
 
@@ -25,10 +26,23 @@ interface DialogContentProps {
   children: React.ReactNode;
 }
 
-const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, ...props }, ref) => {
+interface DialogContentPropsExtended extends DialogContentProps {
+  onClose?: () => void;
+}
+
+const DialogContent = React.forwardRef<HTMLDivElement, DialogContentPropsExtended>(
+  ({ className, children, onClose, ...props }, ref) => {
+    const handleBackdropClick = (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget && onClose) {
+        onClose();
+      }
+    };
+
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        onClick={handleBackdropClick}
+      >
         <div
           ref={ref}
           className={cn(

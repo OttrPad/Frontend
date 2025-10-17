@@ -1,10 +1,16 @@
 import { useAppStore } from "../../store/workspace";
 import { Button } from "../ui/button";
-import { Terminal, X } from "lucide-react";
+import { Terminal, X, GitBranch } from "lucide-react";
 import { RunOutputPane } from "./panels/RunOutputPane";
+import BranchPane from "./panels/BranchPane";
+import { useState } from "react";
+import { useParams } from "react-router-dom";
 
 export function RightPanel() {
   const { toggleRightSidebar } = useAppStore();
+  const [activeTab, setActiveTab] = useState<"output" | "branches">("output");
+  const { roomId, roomCode } = useParams<{ roomId?: string; roomCode?: string }>();
+  const roomIdentifier = roomId || roomCode || "";
 
   const handleClose = () => {
     toggleRightSidebar();
@@ -15,11 +21,25 @@ export function RightPanel() {
       {/* Header */}
       <div className="flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 px-4 py-3">
-            <Terminal className="w-4 h-4 text-orange-400" />
-            <span className="text-sm font-medium text-foreground">
-              Run Output
-            </span>
+          <div className="flex items-center space-x-1 px-2 py-2">
+            <Button
+              variant={activeTab === "output" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("output")}
+              className="h-8 px-3"
+            >
+              <Terminal className="w-4 h-4 mr-1.5" />
+              <span className="text-xs font-medium">Output</span>
+            </Button>
+            <Button
+              variant={activeTab === "branches" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab("branches")}
+              className="h-8 px-3"
+            >
+              <GitBranch className="w-4 h-4 mr-1.5" />
+              <span className="text-xs font-medium">Branches</span>
+            </Button>
           </div>
 
           <Button
@@ -36,7 +56,11 @@ export function RightPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden min-h-0">
-        <RunOutputPane />
+        {activeTab === "output" ? (
+          <RunOutputPane />
+        ) : (
+          <BranchPane roomId={roomIdentifier} />
+        )}
       </div>
     </div>
   );

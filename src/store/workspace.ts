@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import { socket } from "../lib/socket";
+import { apiClient, type Commit, type Milestone as APIMilestone } from "../lib/apiClient";
 
 import type {
   Block,
@@ -52,10 +53,23 @@ interface BlocksState {
 interface MilestonesState {
   milestones: Milestone[];
   selectedMilestoneId: string | null;
-  saveMilestone: (name: string, notes?: string) => void;
-  restoreMilestone: (id: string) => void;
-  deleteMilestone: (id: string) => void;
+  commits: Array<{
+    commit_id: string;
+    commit_message: string;
+    created_at: string;
+    author_id: string;
+  }>;
+  isLoading: boolean;
+  saveMilestone: (roomId: string, name: string, notes?: string) => Promise<void>;
+  restoreMilestone: (roomId: string, commitId: string) => Promise<void>;
+  deleteMilestone: (roomId: string, milestoneId: string) => Promise<void>;
   selectMilestone: (id: string | null) => void;
+  fetchMilestones: (roomId: string) => Promise<void>;
+  createCommit: (roomId: string, notebookId: string, message: string) => Promise<void>;
+  fetchCommits: (roomId: string) => Promise<void>;
+  restoreCommit: (roomId: string, commitId: string) => Promise<void>;
+  setMilestones: (milestones: Milestone[]) => void;
+  setCommits: (commits: Commit[]) => void;
 }
 
 // Presence Store
@@ -377,47 +391,209 @@ export const useBlocksStore = create<BlocksState>()(
   )
 );
 
+// Persistence for blocks store - prevent data loss on reload
+const BLOCKS_STORAGE_KEY = "ottrpad-blocks-backup";
+
+// Load blocks from localStorage on init
+if (typeof window !== "undefined") {
+  try {
+    const stored = localStorage.getItem(BLOCKS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Extend timeout to 24 hours and only restore if we have actual blocks
+      if (parsed.blocks && parsed.blocks.length > 0 && parsed.timestamp && Date.now() - parsed.timestamp < 86400000) { // 24 hours
+        useBlocksStore.setState({ blocks: parsed.blocks });
+        console.log("[BlocksStore] Restored", parsed.blocks.length, "blocks from localStorage (age:", Math.round((Date.now() - parsed.timestamp) / 60000), "minutes)");
+      } else if (!parsed.blocks || parsed.blocks.length === 0) {
+        console.log("[BlocksStore] Skipping restore - no blocks in localStorage");
+      } else {
+        console.log("[BlocksStore] Skipping restore - data too old (age:", Math.round((Date.now() - parsed.timestamp) / 3600000), "hours)");
+      }
+    }
+  } catch (err) {
+    console.error("[BlocksStore] Failed to load from localStorage:", err);
+  }
+
+  // Subscribe to changes and auto-save to localStorage
+  useBlocksStore.subscribe((state) => {
+    try {
+      // Only save if we have blocks (don't save empty state)
+      if (state.blocks && state.blocks.length > 0) {
+        localStorage.setItem(
+          BLOCKS_STORAGE_KEY,
+          JSON.stringify({
+            blocks: state.blocks,
+            timestamp: Date.now(),
+          })
+        );
+      }
+    } catch (err) {
+      console.error("[BlocksStore] Failed to save to localStorage:", err);
+    }
+  });
+}
+
 export const useMilestonesStore = create<MilestonesState>()(
   devtools(
     (set, get) => ({
       milestones: [],
       selectedMilestoneId: null,
+      commits: [],
+      isLoading: false,
 
-      saveMilestone: (name, notes) => {
-        const milestone: Milestone = {
-          id: uuidv4(),
-          name,
-          notes,
-          createdAt: Date.now(),
-          snapshot: {
-            blocks: useBlocksStore.getState().blocks,
-            files: useFilesStore.getState().files,
-          },
-        };
+      saveMilestone: async (roomId, name, notes) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.createMilestone({
+            roomId,
+            milestoneName: name,
+            milestoneNotes: notes || "",
+          });
 
-        set((state) => ({
-          milestones: [...state.milestones, milestone],
-        }));
-      },
-
-      restoreMilestone: (id) => {
-        const milestone = get().milestones.find((m) => m.id === id);
-        if (milestone) {
-          useBlocksStore.setState({ blocks: milestone.snapshot.blocks });
-          useFilesStore.setState({ files: milestone.snapshot.files });
+          // Fetch updated milestones
+          await get().fetchMilestones(roomId);
+        } catch (error) {
+          console.error("Failed to save milestone:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
         }
       },
 
-      deleteMilestone: (id) => {
-        set((state) => ({
-          milestones: state.milestones.filter((m) => m.id !== id),
-          selectedMilestoneId:
-            state.selectedMilestoneId === id ? null : state.selectedMilestoneId,
-        }));
+      restoreMilestone: async (roomId, commitId) => {
+        set({ isLoading: true });
+        try {
+          const response = await apiClient.restoreCommit({
+            roomId,
+            commitId,
+          });
+
+          // Update blocks with restored snapshot
+          if (response.snapshot?.blocks) {
+            const blocks = response.snapshot.blocks.map(block => ({
+              ...block,
+              lang: (block.lang as Lang) || "python"
+            }));
+            useBlocksStore.setState({ blocks });
+          }
+        } catch (error) {
+          console.error("Failed to restore milestone:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      deleteMilestone: async (roomId, milestoneId) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.deleteMilestone({ roomId, milestoneId });
+          
+          // Remove from local state
+          set((state) => ({
+            milestones: state.milestones.filter((m) => m.id !== milestoneId),
+            selectedMilestoneId:
+              state.selectedMilestoneId === milestoneId
+                ? null
+                : state.selectedMilestoneId,
+          }));
+        } catch (error) {
+          console.error("Failed to delete milestone:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
       selectMilestone: (id) => {
         set({ selectedMilestoneId: id });
+      },
+
+      fetchMilestones: async (roomId) => {
+        set({ isLoading: true });
+        try {
+          const response = await apiClient.getMilestones(roomId);
+          const milestones: Milestone[] = response.milestones.map((m: APIMilestone) => ({
+            id: m.milestone_id,
+            name: m.name,
+            notes: m.notes,
+            createdAt: new Date(m.created_at).getTime(),
+            snapshot: { blocks: [], files: [] }, // Snapshot will be fetched when needed
+          }));
+          set({ milestones });
+        } catch (error) {
+          console.error("Failed to fetch milestones:", error);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      createCommit: async (roomId, notebookId, message) => {
+        set({ isLoading: true });
+        try {
+          // Get current blocks snapshot
+          const blocks = useBlocksStore.getState().blocks;
+          const snapshot = { blocks };
+
+          await apiClient.createCommit({
+            roomId,
+            notebookId,
+            message,
+            snapshot,
+          });
+
+          // Fetch updated commits
+          await get().fetchCommits(roomId);
+        } catch (error) {
+          console.error("Failed to create commit:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      fetchCommits: async (roomId) => {
+        set({ isLoading: true });
+        try {
+          const timeline = await apiClient.getCommitTimeline(roomId);
+          set({ commits: timeline });
+        } catch (error) {
+          console.error("Failed to fetch commits:", error);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      restoreCommit: async (roomId, commitId) => {
+        set({ isLoading: true });
+        try {
+          const response = await apiClient.restoreCommit({
+            roomId,
+            commitId,
+          });
+
+          // Update blocks with restored snapshot
+          if (response.snapshot?.blocks) {
+            const blocks = response.snapshot.blocks.map(block => ({
+              ...block,
+              lang: (block.lang as Lang) || "python"
+            }));
+            useBlocksStore.setState({ blocks });
+          }
+        } catch (error) {
+          console.error("Failed to restore commit:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      setMilestones: (milestones) => {
+        set({ milestones });
+      },
+
+      setCommits: (commits) => {
+        set({ commits });
       },
     }),
     { name: "milestones-store" }
@@ -933,6 +1109,12 @@ export const useAppStore = create<AppState>()(
         const normalized = roomId == null ? null : String(roomId);
         const prevRoom = useAppStore.getState().currentRoom;
         set({ currentRoom: normalized });
+        // If a user had previously persisted the "versions" panel as active,
+        // don't open it automatically when joining a room — default back to files.
+        const currActivity = useAppStore.getState().activeActivity;
+        if (currActivity === "versions") {
+          set({ activeActivity: "files" });
+        }
         // Clear run outputs whenever leaving a room or switching rooms (including re-selecting same after auth refresh)
         if (
           normalized === null || // leaving

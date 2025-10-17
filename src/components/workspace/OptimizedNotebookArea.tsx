@@ -16,6 +16,7 @@ import {
 import { useBlocksStore } from "../../store/workspace";
 import { OptimizedBlock } from "./OptimizedBlock";
 import { SharedMonacoEditor } from "../monaco/SharedMonacoEditor";
+import { MonacoErrorBoundary } from "../monaco/MonacoErrorBoundary";
 import { useIntersectionVirtualization } from "../../hooks/useVirtualization";
 import { Button } from "../ui/button";
 import { Plus, FileText } from "lucide-react";
@@ -444,16 +445,18 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
                 ref={setSharedEditor}
                 className="shared-monaco-editor-container"
               >
-                <SharedMonacoEditor
-                  focusedBlockId={focusedBlockId}
-                  // keep this prop if your editor expects it
-                  notebookId={activeNotebookId}
-                  blocks={blocks}
-                  onContentChange={handleContentChange}
-                  onMonacoInit={handleMonacoInit}
-                  height={editorPositionRef.current.height}
-                  className="rounded-md overflow-hidden"
-                />
+                <MonacoErrorBoundary>
+                  <SharedMonacoEditor
+                    focusedBlockId={focusedBlockId}
+                    // keep this prop if your editor expects it
+                    notebookId={activeNotebookId}
+                    blocks={blocks}
+                    onContentChange={handleContentChange}
+                    onMonacoInit={handleMonacoInit}
+                    height={editorPositionRef.current.height}
+                    className="rounded-md overflow-hidden"
+                  />
+                </MonacoErrorBoundary>
               </div>
             )}
           </>

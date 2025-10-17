@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import { Editor, type Monaco } from "@monaco-editor/react";
+import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import * as Y from "yjs";
 import { MonacoBinding } from "y-monaco";
@@ -236,7 +236,75 @@ export function SharedMonacoEditor({
     }
   }, [notebookId]);
 
-  // Initialize Monaco and themes
+  // Define themes BEFORE editor mounts to prevent beforeMountRef error
+  const handleBeforeMount = useCallback((monacoInstance: Monaco) => {
+    monacoInstance.editor.defineTheme("ottrpad-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "#94a3b8", fontStyle: "italic" },
+        { token: "keyword", foreground: "#fb923d", fontStyle: "bold" },
+        { token: "string", foreground: "#fbbf24" },
+        { token: "number", foreground: "#60a5fa" },
+        { token: "function", foreground: "#34d399" },
+        { token: "variable", foreground: "#e5e5e5" },
+        { token: "type", foreground: "#a78bfa" },
+        { token: "operator", foreground: "#fb923d" },
+      ],
+      colors: {
+        "editor.background": "#1f2937",
+        "editor.foreground": "#e5e5e5",
+        "editor.lineHighlightBackground": "#374151",
+        "editor.selectionBackground": "#fb923d33",
+        "editor.inactiveSelectionBackground": "#fb923d1a",
+        "editorCursor.foreground": "#fb923d",
+        "editorLineNumber.foreground": "#94a3b8",
+        "editorLineNumber.activeForeground": "#fb923d",
+        "editor.findMatchBackground": "#fb923d4d",
+        "editor.findMatchHighlightBackground": "#fb923d26",
+        "editorWidget.background": "#1f2937",
+        "editorWidget.border": "#374151",
+        "editorHoverWidget.background": "#1f2937",
+        "editorHoverWidget.border": "#374151",
+        "editorSuggestWidget.background": "#1f2937",
+        "editorSuggestWidget.border": "#374151",
+        "editorSuggestWidget.selectedBackground": "#fb923d33",
+      },
+    });
+
+    monacoInstance.editor.defineTheme("ottrpad-light", {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "#64748b", fontStyle: "italic" },
+        { token: "keyword", foreground: "#ea580c", fontStyle: "bold" },
+        { token: "string", foreground: "#d97706" },
+        { token: "number", foreground: "#2563eb" },
+        { token: "function", foreground: "#059669" },
+        { token: "variable", foreground: "#1f2937" },
+        { token: "type", foreground: "#7c3aed" },
+        { token: "operator", foreground: "#ea580c" },
+      ],
+      colors: {
+        "editor.background": "#ffffff",
+        "editor.foreground": "#1f2937",
+        "editor.lineHighlightBackground": "#fb923d0d",
+        "editor.selectionBackground": "#fb923d33",
+        "editor.inactiveSelectionBackground": "#fb923d1a",
+        "editorCursor.foreground": "#ea580c",
+        "editorLineNumber.foreground": "#64748b",
+        "editorLineNumber.activeForeground": "#ea580c",
+        "editor.findMatchBackground": "#fb923d4d",
+        "editor.findMatchHighlightBackground": "#fb923d26",
+        "editorWidget.background": "#ffffff",
+        "editorWidget.border": "#e5e7eb",
+        "editorHoverWidget.background": "#ffffff",
+        "editorHoverWidget.border": "#e5e7eb",
+      },
+    });
+  }, []);
+
+  // Initialize Monaco - themes are defined in beforeMount
   const handleEditorDidMount = useCallback(
     (editorInstance: editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
       setMonaco(monacoInstance);
@@ -244,71 +312,7 @@ export function SharedMonacoEditor({
       onMonacoInit?.(monacoInstance);
       modelManagerRef.current = new MonacoModelManager(monacoInstance);
 
-      monacoInstance.editor.defineTheme("ottrpad-dark", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [
-          { token: "comment", foreground: "#94a3b8", fontStyle: "italic" },
-          { token: "keyword", foreground: "#fb923d", fontStyle: "bold" },
-          { token: "string", foreground: "#fbbf24" },
-          { token: "number", foreground: "#60a5fa" },
-          { token: "function", foreground: "#34d399" },
-          { token: "variable", foreground: "#e5e5e5" },
-          { token: "type", foreground: "#a78bfa" },
-          { token: "operator", foreground: "#fb923d" },
-        ],
-        colors: {
-          "editor.background": "#1f2937",
-          "editor.foreground": "#e5e5e5",
-          "editor.lineHighlightBackground": "#374151",
-          "editor.selectionBackground": "#fb923d33",
-          "editor.inactiveSelectionBackground": "#fb923d1a",
-          "editorCursor.foreground": "#fb923d",
-          "editorLineNumber.foreground": "#94a3b8",
-          "editorLineNumber.activeForeground": "#fb923d",
-          "editor.findMatchBackground": "#fb923d4d",
-          "editor.findMatchHighlightBackground": "#fb923d26",
-          "editorWidget.background": "#1f2937",
-          "editorWidget.border": "#374151",
-          "editorHoverWidget.background": "#1f2937",
-          "editorHoverWidget.border": "#374151",
-          "editorSuggestWidget.background": "#1f2937",
-          "editorSuggestWidget.border": "#374151",
-          "editorSuggestWidget.selectedBackground": "#fb923d33",
-        },
-      });
-
-      monacoInstance.editor.defineTheme("ottrpad-light", {
-        base: "vs",
-        inherit: true,
-        rules: [
-          { token: "comment", foreground: "#64748b", fontStyle: "italic" },
-          { token: "keyword", foreground: "#ea580c", fontStyle: "bold" },
-          { token: "string", foreground: "#d97706" },
-          { token: "number", foreground: "#2563eb" },
-          { token: "function", foreground: "#059669" },
-          { token: "variable", foreground: "#1f2937" },
-          { token: "type", foreground: "#7c3aed" },
-          { token: "operator", foreground: "#ea580c" },
-        ],
-        colors: {
-          "editor.background": "#ffffff",
-          "editor.foreground": "#1f2937",
-          "editor.lineHighlightBackground": "#fb923d0d",
-          "editor.selectionBackground": "#fb923d33",
-          "editor.inactiveSelectionBackground": "#fb923d1a",
-          "editorCursor.foreground": "#ea580c",
-          "editorLineNumber.foreground": "#64748b",
-          "editorLineNumber.activeForeground": "#ea580c",
-          "editor.findMatchBackground": "#fb923d4d",
-          "editor.findMatchHighlightBackground": "#fb923d26",
-          "editorWidget.background": "#ffffff",
-          "editorWidget.border": "#e5e7eb",
-          "editorHoverWidget.background": "#ffffff",
-          "editorHoverWidget.border": "#e5e7eb",
-        },
-      });
-
+      // Set the theme (themes are already defined in beforeMount)
       monacoInstance.editor.setTheme(
         theme === "dark" ? "ottrpad-dark" : "ottrpad-light"
       );
@@ -480,11 +484,11 @@ export function SharedMonacoEditor({
     >
       <Editor
         height={height}
-        language="python" // actual language comes from the bound model
-        value="" // content managed by the bound model
+        defaultLanguage="python"
+        defaultValue=""
+        beforeMount={handleBeforeMount}
         onMount={handleEditorDidMount}
         options={PERFORMANCE_OPTIONS}
-        theme={theme === "dark" ? "ottrpad-dark" : "ottrpad-light"}
         loading={
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400" />

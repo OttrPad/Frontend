@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useBlocksStore, useMilestonesStore } from "../store/workspace";
 
-export function useKeyboardShortcuts() {
+export function useKeyboardShortcuts(roomId?: string) {
   const { addBlock, selectedBlockId, runBlock, runAllBlocks } =
     useBlocksStore();
   const { saveMilestone } = useMilestonesStore();
@@ -54,13 +54,16 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Ctrl/Cmd + S: Save milestone
-      if (isCtrlOrCmd && e.key === "s") {
-        e.preventDefault();
-        const defaultName = `Milestone ${new Date().toLocaleString()}`;
-        saveMilestone(defaultName);
-        return;
-      }
+      // Ctrl/Cmd + S: Disabled to avoid conflicts with browser save
+      // Users can use the milestone button in the UI instead
+      // if (isCtrlOrCmd && e.key === "s") {
+      //   e.preventDefault();
+      //   if (roomId) {
+      //     const defaultName = `Milestone ${new Date().toLocaleString()}`;
+      //     saveMilestone(roomId, defaultName);
+      //   }
+      //   return;
+      // }
 
       // Alt + Arrow Up/Down: Move block (handled by Block component)
       // These are just placeholders for future implementation
@@ -76,7 +79,7 @@ export function useKeyboardShortcuts() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [addBlock, selectedBlockId, runBlock, runAllBlocks, saveMilestone]);
+  }, [addBlock, selectedBlockId, runBlock, runAllBlocks, saveMilestone, roomId]);
 
   return {
     showShortcutsModal,
