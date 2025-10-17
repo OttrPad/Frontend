@@ -241,26 +241,3 @@
   border-color: #f97316 !important; /* orange */
   background-color: rgba(249, 115, 22, 0.25) !important;
 }
-
-.yRemoteCursorLabel {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-[class*="yRemoteCursorLabel-1"] {
-  background: #ef4444 !important;
-}
-[class*="yRemoteCursorLabel-2"] {
-  background: #3b82f6 !important;
-}
-[class*="yRemoteCursorLabel-3"] {
-  background: #22c55e !important;
-}
-[class*="yRemoteCursorLabel-4"] {
-  background: #eab308 !important;
-}
-[class*="yRemoteCursorLabel-5"] {
-  background: #a855f7 !important;
-}
-[class*="yRemoteCursorLabel-6"] {
-  background: #f97316 !important;
-}
