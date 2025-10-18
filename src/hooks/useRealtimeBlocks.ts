@@ -5,6 +5,7 @@ import {
 } from "../lib/socketCollaborationService";
 import { useBlocksStore } from "../store/workspace";
 import type { Lang } from "../types/workspace";
+import * as Y from "yjs";
 
 type Block = {
   id: string;
@@ -100,6 +101,68 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
       socketCollaborationService.off("block:moved", onMoved);
     };
   }, [activeNotebookId, upsertBlock, removeBlock, setBlocks]);
+
+  useEffect(() => {
+    if (!activeNotebookId) return;
+
+    const ydoc =
+      socketCollaborationService.getYjsDocument(activeNotebookId) ||
+      socketCollaborationService.setupYjsDocument(activeNotebookId);
+
+    const blockContentMap = ydoc.getMap<Y.Text>("blockContent");
+    const observers = new Map<string, (e: Y.YTextEvent) => void>();
+
+    // Attach observer to a Y.Text
+    const attachObserver = (blockId: string, ytext: Y.Text) => {
+      if (observers.has(blockId)) return;
+
+      const observer = () => {
+        const content = ytext.toString();
+        // keep React store mirrored with Yjs content
+        useBlocksStore.getState().updateBlock(blockId, { content });
+      };
+
+      ytext.observe(observer);
+      observers.set(blockId, observer);
+
+      // Seed the store once when attaching
+      const initial = ytext.toString();
+      useBlocksStore.getState().updateBlock(blockId, { content: initial });
+    };
+
+    // Attach to existing Y.Text entries
+    blockContentMap.forEach((ytext, key) => {
+      if (ytext instanceof Y.Text) attachObserver(key, ytext);
+    });
+
+    // Watch for adds/updates/deletes of entries in the map
+    const mapObserver = (event: Y.YMapEvent<Y.Text>) => {
+      event.changes.keys.forEach((change, key) => {
+        if (change.action === "add" || change.action === "update") {
+          const ytext = blockContentMap.get(key);
+          if (ytext instanceof Y.Text) attachObserver(key, ytext);
+        } else if (change.action === "delete") {
+          const ytext = blockContentMap.get(key);
+          const fn = observers.get(key);
+          if (ytext && fn) ytext.unobserve(fn);
+          observers.delete(key);
+          // also remove content from store if you want:
+          // useBlocksStore.getState().removeBlock(key);
+        }
+      });
+    };
+
+    blockContentMap.observe(mapObserver);
+
+    return () => {
+      blockContentMap.unobserve(mapObserver);
+      observers.forEach((fn, key) => {
+        const ytext = blockContentMap.get(key);
+        if (ytext) ytext.unobserve(fn);
+      });
+      observers.clear();
+    };
+  }, [activeNotebookId]);
 
   // Actions (REST -> server will broadcast -> this hook upserts/deletes)
   const createBlockAt = useCallback(

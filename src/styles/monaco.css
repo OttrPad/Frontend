@@ -188,3 +188,56 @@
   color: #94a3b8 !important;
   font-style: italic;
 }
+
+/* Default fallback (if user has no color assigned) */
+.yRemoteSelection {
+  background-color: rgba(
+    251,
+    146,
+    61,
+    0.25
+  ) !important; /* orange glass highlight */
+  border-radius: 2px;
+}
+
+.yRemoteSelectionHead {
+  border-left: 2px solid #fb923d !important;
+  box-shadow: 0 0 6px rgba(251, 146, 61, 0.4);
+}
+
+/* Specific color mappings — use prefix matching */
+[class*="yRemoteSelectionHead-1"],
+[class*="yRemoteSelection-1"] {
+  border-color: #ef4444 !important; /* red */
+  background-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+[class*="yRemoteSelectionHead-2"],
+[class*="yRemoteSelection-2"] {
+  border-color: #3b82f6 !important; /* blue */
+  background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+[class*="yRemoteSelectionHead-3"],
+[class*="yRemoteSelection-3"] {
+  border-color: #22c55e !important; /* green */
+  background-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+[class*="yRemoteSelectionHead-4"],
+[class*="yRemoteSelection-4"] {
+  border-color: #eab308 !important; /* yellow */
+  background-color: rgba(234, 179, 8, 0.25) !important;
+}
+
+[class*="yRemoteSelectionHead-5"],
+[class*="yRemoteSelection-5"] {
+  border-color: #a855f7 !important; /* purple */
+  background-color: rgba(168, 85, 247, 0.25) !important;
+}
+
+[class*="yRemoteSelectionHead-6"],
+[class*="yRemoteSelection-6"] {
+  border-color: #f97316 !important; /* orange */
+  background-color: rgba(249, 115, 22, 0.25) !important;
+}

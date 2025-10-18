@@ -7,7 +7,6 @@ import type { Block, Lang } from "../../types/workspace";
 import { useAppStore } from "../../store/workspace";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
 import { apiClient } from "../../lib/apiClient";
-
 interface ModelInfo {
   model: editor.ITextModel;
   language: Lang;
@@ -538,9 +537,14 @@ export function SharedMonacoEditor({
     const model = editor.getModel();
     if (!model) return;
 
+    const latestFromY = ytext.toString();
+    if (model.getValue() !== latestFromY) {
+      model.setValue(latestFromY);
+    }
+
     // Dispose previous binding first
     bindingRef.current?.destroy();
-    bindingRef.current = null;
+    // bindingRef.current = null;
 
     // Generate consistent color for this user
     const palette = [
@@ -556,6 +560,7 @@ export function SharedMonacoEditor({
       hash = (hash << 5) - hash + userId.charCodeAt(i);
     }
     const color = palette[Math.abs(hash) % palette.length];
+    const colorIndex = Math.abs(hash) % palette.length;
 
     console.log(
       "🎯 Setting up awareness for",
@@ -568,11 +573,10 @@ export function SharedMonacoEditor({
     // CRITICAL: MonacoBinding requires ONLY { user: { name, color } } in awareness
     // Additional fields like userId/email/blockId can break it!
     // Set this BEFORE creating the binding so MonacoBinding can read it
-    awareness.setLocalState({
-      user: {
-        name: userEmail.split("@")[0] || "User",
-        color,
-      },
+    awareness.setLocalStateField("user", {
+      name: userEmail.split("@")[0] || "User",
+      color,
+      colorIndex, // <-- NEW
     });
 
     console.log(
@@ -593,6 +597,17 @@ export function SharedMonacoEditor({
       new Set([editor]),
       awareness // Use real awareness without Proxy
     );
+
+    // decorateRemoteCursors(editor, awareness);
+
+    editor.onDidChangeCursorSelection(() => {
+      const selection = editor.getSelection();
+      if (selection) {
+        const start = model.getOffsetAt(selection.getStartPosition());
+        const end = model.getOffsetAt(selection.getEndPosition());
+        awareness.setLocalStateField("cursor", { start, end });
+      }
+    });
 
     console.log(
       "   MonacoBinding created with filtered awareness for block:",
@@ -683,6 +698,9 @@ export function SharedMonacoEditor({
       });
     };
     awareness.on("change", debugAwarenessListener);
+    awareness.on("change", () => {
+      editor.layout();
+    });
 
     // Listen to cursor/selection changes in the editor
     const cursorListener = editor.onDidChangeCursorPosition((e) => {
@@ -702,11 +720,6 @@ export function SharedMonacoEditor({
       cursorListener.dispose();
       bindingRef.current?.destroy();
       bindingRef.current = null;
-      // Clear awareness state when leaving
-      if (awareness) {
-        console.log("🧹 Cleaning up awareness for block:", focusedBlockId);
-        awareness.setLocalState(null);
-      }
     };
   }, [focusedBlockId, notebookId, editor, onContentChange, userId, userEmail]);
 
