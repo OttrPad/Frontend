@@ -14,7 +14,7 @@ import { GitCommit, Loader2 } from "lucide-react";
 interface CommitDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCommit: (message: string) => Promise<void>;
+  onCommit: (message: string, notes?: string) => Promise<void>;
   isMilestone?: boolean;
 }
 
@@ -30,15 +30,19 @@ export function CommitDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!message.trim()) {
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const commitMessage = isMilestone && notes ? `${message}\n\n${notes}` : message;
-      await onCommit(commitMessage);
+      // Pass notes as separate parameter for milestones
+      if (isMilestone) {
+        await onCommit(message.trim(), notes.trim() || undefined);
+      } else {
+        await onCommit(message.trim());
+      }
       setMessage("");
       setNotes("");
       onClose();

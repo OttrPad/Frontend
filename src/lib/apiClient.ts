@@ -125,6 +125,27 @@ export interface CommitTimelineEntry {
   snapshot_json?: CommitSnapshot;
   snapshot?: CommitSnapshot; // Alias for compatibility
 }
+
+export interface MilestoneGroup {
+  milestone: {
+    milestone_id: string;
+    name: string;
+    notes?: string;
+    commit_id: string;
+    created_at: string;
+    created_by: string;
+    room_id: string;
+  } | null;
+  commits: Array<{
+    id: string;
+    type: "commit";
+    message: string;
+    created_at: string;
+    author_id: string;
+    snapshot_json: CommitSnapshot;
+  }>;
+}
+
 export interface AiSuggestionRequest {
   contextBefore: string;
   contextAfter: string;
@@ -603,6 +624,24 @@ class ApiClient {
   async deleteCommit(commitId: string): Promise<{ message: string }> {
     return this.request(`/api/version-control/commits/${commitId}`, {
       method: "DELETE",
+    });
+  }
+
+  /**
+   * Revert the latest commit in a room
+   */
+  async revertLatestCommit(roomId: string): Promise<{
+    message: string;
+    revertedCommit: {
+      id: string;
+      message: string;
+      created_at: string;
+    };
+  }> {
+    const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
+    return this.request("/api/version-control/revert", {
+      method: "POST",
+      body: JSON.stringify({ roomId: resolvedRoomId }),
     });
   }
 
