@@ -98,6 +98,34 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
       });
     };
 
+    const onUpdated = (data: {
+      notebookId: string;
+      blockId: string;
+      language?: string;
+    }) => {
+      console.log("🔔 block:updated event received:", data);
+      if (data.notebookId !== activeNotebookId) {
+        console.log(
+          "⚠️ Ignoring update for different notebook:",
+          data.notebookId,
+          "vs",
+          activeNotebookId
+        );
+        return;
+      }
+      if (data.language) {
+        console.log(
+          "✅ Updating block language:",
+          data.blockId,
+          "to",
+          data.language
+        );
+        updateBlock(data.blockId, { lang: data.language as Lang });
+      } else {
+        console.log("⚠️ No language in update data");
+      }
+    };
+
     const onDeleted = (data: { notebookId: string; blockId: string }) => {
       if (data.notebookId !== activeNotebookId) return;
       removeBlock(data.blockId);
@@ -121,15 +149,17 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
     };
 
     socketCollaborationService.on("block:created", onCreated);
+    socketCollaborationService.on("block:updated", onUpdated);
     socketCollaborationService.on("block:deleted", onDeleted);
     socketCollaborationService.on("block:moved", onMoved);
 
     return () => {
       socketCollaborationService.off("block:created", onCreated);
+      socketCollaborationService.off("block:updated", onUpdated);
       socketCollaborationService.off("block:deleted", onDeleted);
       socketCollaborationService.off("block:moved", onMoved);
     };
-  }, [activeNotebookId, upsertBlock, removeBlock, setBlocks]);
+  }, [activeNotebookId, upsertBlock, removeBlock, setBlocks, updateBlock]);
 
   // Listen to Yjs updates for block content to update the preview
   // This ensures that when other users type in blocks, the preview shows their changes

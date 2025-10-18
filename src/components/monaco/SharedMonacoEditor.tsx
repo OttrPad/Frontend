@@ -17,7 +17,6 @@ interface ModelInfo {
 const getMonacoLanguage = (lang: Lang): string => {
   const languageMap: Record<Lang, string> = {
     python: "python",
-    json: "json",
     markdown: "markdown",
   };
   return languageMap[lang] || "plaintext";
@@ -151,8 +150,6 @@ class MonacoModelManager {
     switch (language) {
       case "python":
         return "py";
-      case "json":
-        return "json";
       case "markdown":
         return "md";
       default:
