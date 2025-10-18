@@ -144,7 +144,15 @@ export function CollaborationProvider({
 
   const handleAwarenessUpdate = useCallback(
     (data: { notebookId: string; states: UserPresence[] }) => {
-      setActiveUsers(data.states);
+      // De-duplicate by userId + email to avoid ghost duplicates from multiple clientIds
+      const seen = new Set<string>();
+      const deduped = (data.states || []).filter((u: UserPresence) => {
+        const key = `${u.userId || ""}|${u.userEmail || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setActiveUsers(deduped);
     },
     []
   );
@@ -304,6 +312,8 @@ export function CollaborationProvider({
 
   const switchNotebook = useCallback(async (notebookId: string) => {
     try {
+      // Mark as loaded to prevent the auto-load effect from re-running
+      loadedNotebooksRef.current.add(notebookId);
       setHydratingNotebookId(notebookId);
       setActiveNotebookId(notebookId);
 
@@ -328,16 +338,22 @@ export function CollaborationProvider({
         console.warn("⚠️ No Yjs state returned for notebook:", notebookId);
       }
 
-      // 3️⃣ Load block structure (metadata only)
+      // 3️⃣ Load block structure (metadata)
       const blockList = await socketCollaborationService.getBlocks(notebookId);
-      const convertedBlocks: Block[] = blockList.map((b) => ({
-        id: b.id,
-        lang: (b.language as Lang) || "python",
-        content: "", // hydrated by Y.Text later
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
-        position: b.position,
-      }));
+      const blockContentMap = ydoc.getMap<Y.Text>("blockContent");
+      const convertedBlocks: Block[] = blockList.map((b) => {
+        const ytext = blockContentMap.get(b.id);
+        const contentFromY = ytext ? ytext.toString() : "";
+        return {
+          id: b.id,
+          lang: (b.language as Lang) || "python",
+          // Use Yjs content if available to avoid clearing on switch
+          content: contentFromY,
+          createdAt: b.createdAt,
+          updatedAt: b.updatedAt,
+          position: b.position,
+        };
+      });
 
       // 4️⃣ Update block store only AFTER Yjs snapshot applied
       useBlocksStore
@@ -361,6 +377,37 @@ export function CollaborationProvider({
     setNotebooks((prev) => prev.filter((nb) => nb.id !== notebookId));
     setActiveNotebookId((id) => (id === notebookId ? null : id));
   }, []);
+
+  /* ---------- Auto-load notebook content when activeNotebookId changes ---------- */
+  const loadedNotebooksRef = useRef<Set<string>>(new Set());
+  const switchingRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !activeNotebookId ||
+      loadedNotebooksRef.current.has(activeNotebookId) ||
+      switchingRef.current
+    ) {
+      return;
+    }
+
+    // Mark as loaded to prevent re-loading
+    loadedNotebooksRef.current.add(activeNotebookId);
+
+    // Load notebook content
+    (async () => {
+      try {
+        switchingRef.current = true;
+        await switchNotebook(activeNotebookId);
+      } catch (err) {
+        console.error("Failed to auto-load notebook:", err);
+        // Remove from loaded set so we can retry
+        loadedNotebooksRef.current.delete(activeNotebookId);
+      } finally {
+        switchingRef.current = false;
+      }
+    })();
+  }, [activeNotebookId, switchNotebook]);
 
   /* ---------- Context value ---------- */
   const value: CollaborationContextType = {

@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import { socket } from "../lib/socket";
-import { apiClient, type Commit, type Milestone as APIMilestone } from "../lib/apiClient";
+import {
+  apiClient,
+  type Commit,
+  type Milestone as APIMilestone,
+} from "../lib/apiClient";
 
 import type {
   Block,
@@ -60,12 +64,20 @@ interface MilestonesState {
     author_id: string;
   }>;
   isLoading: boolean;
-  saveMilestone: (roomId: string, name: string, notes?: string) => Promise<void>;
+  saveMilestone: (
+    roomId: string,
+    name: string,
+    notes?: string
+  ) => Promise<void>;
   restoreMilestone: (roomId: string, commitId: string) => Promise<void>;
   deleteMilestone: (roomId: string, milestoneId: string) => Promise<void>;
   selectMilestone: (id: string | null) => void;
   fetchMilestones: (roomId: string) => Promise<void>;
-  createCommit: (roomId: string, notebookId: string, message: string) => Promise<void>;
+  createCommit: (
+    roomId: string,
+    notebookId: string,
+    message: string
+  ) => Promise<void>;
   fetchCommits: (roomId: string) => Promise<void>;
   restoreCommit: (roomId: string, commitId: string) => Promise<void>;
   setMilestones: (milestones: Milestone[]) => void;
@@ -239,17 +251,8 @@ export const useFilesStore = create<FilesState>()(
 export const useBlocksStore = create<BlocksState>()(
   devtools(
     (set, get) => ({
-      blocks: [
-        {
-          id: "welcome-block",
-          lang: "python",
-          content:
-            '# Welcome to OttrPad!\n# Start coding collaboratively\nprint("Hello, World!")',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          position: 0,
-        },
-      ],
+      // Start with empty blocks; notebooks will load their content via Yjs
+      blocks: [],
       selectedBlockId: null,
 
       // Create a new block locally (used for non-realtime flows/UI convenience)
@@ -394,26 +397,10 @@ export const useBlocksStore = create<BlocksState>()(
 // Persistence for blocks store - prevent data loss on reload
 const BLOCKS_STORAGE_KEY = "ottrpad-blocks-backup";
 
-// Load blocks from localStorage on init
-if (typeof window !== "undefined") {
-  try {
-    const stored = localStorage.getItem(BLOCKS_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Extend timeout to 24 hours and only restore if we have actual blocks
-      if (parsed.blocks && parsed.blocks.length > 0 && parsed.timestamp && Date.now() - parsed.timestamp < 86400000) { // 24 hours
-        useBlocksStore.setState({ blocks: parsed.blocks });
-        console.log("[BlocksStore] Restored", parsed.blocks.length, "blocks from localStorage (age:", Math.round((Date.now() - parsed.timestamp) / 60000), "minutes)");
-      } else if (!parsed.blocks || parsed.blocks.length === 0) {
-        console.log("[BlocksStore] Skipping restore - no blocks in localStorage");
-      } else {
-        console.log("[BlocksStore] Skipping restore - data too old (age:", Math.round((Date.now() - parsed.timestamp) / 3600000), "hours)");
-      }
-    }
-  } catch (err) {
-    console.error("[BlocksStore] Failed to load from localStorage:", err);
-  }
+// DISABLED: localStorage restore interferes with Yjs-based notebook loading
+// Blocks are now loaded from the collaboration service per notebook
 
+if (typeof window !== "undefined") {
   // Subscribe to changes and auto-save to localStorage
   useBlocksStore.subscribe((state) => {
     try {
@@ -470,9 +457,9 @@ export const useMilestonesStore = create<MilestonesState>()(
 
           // Update blocks with restored snapshot
           if (response.snapshot?.blocks) {
-            const blocks = response.snapshot.blocks.map(block => ({
+            const blocks = response.snapshot.blocks.map((block) => ({
               ...block,
-              lang: (block.lang as Lang) || "python"
+              lang: (block.lang as Lang) || "python",
             }));
             useBlocksStore.setState({ blocks });
           }
@@ -488,7 +475,7 @@ export const useMilestonesStore = create<MilestonesState>()(
         set({ isLoading: true });
         try {
           await apiClient.deleteMilestone({ roomId, milestoneId });
-          
+
           // Remove from local state
           set((state) => ({
             milestones: state.milestones.filter((m) => m.id !== milestoneId),
@@ -513,13 +500,15 @@ export const useMilestonesStore = create<MilestonesState>()(
         set({ isLoading: true });
         try {
           const response = await apiClient.getMilestones(roomId);
-          const milestones: Milestone[] = response.milestones.map((m: APIMilestone) => ({
-            id: m.milestone_id,
-            name: m.name,
-            notes: m.notes,
-            createdAt: new Date(m.created_at).getTime(),
-            snapshot: { blocks: [], files: [] }, // Snapshot will be fetched when needed
-          }));
+          const milestones: Milestone[] = response.milestones.map(
+            (m: APIMilestone) => ({
+              id: m.milestone_id,
+              name: m.name,
+              notes: m.notes,
+              createdAt: new Date(m.created_at).getTime(),
+              snapshot: { blocks: [], files: [] }, // Snapshot will be fetched when needed
+            })
+          );
           set({ milestones });
         } catch (error) {
           console.error("Failed to fetch milestones:", error);
@@ -574,9 +563,9 @@ export const useMilestonesStore = create<MilestonesState>()(
 
           // Update blocks with restored snapshot
           if (response.snapshot?.blocks) {
-            const blocks = response.snapshot.blocks.map(block => ({
+            const blocks = response.snapshot.blocks.map((block) => ({
               ...block,
-              lang: (block.lang as Lang) || "python"
+              lang: (block.lang as Lang) || "python",
             }));
             useBlocksStore.setState({ blocks });
           }
@@ -810,7 +799,7 @@ export const useAIStore = create<AIState>()(
       sendMessage: async (content) => {
         // optimistic add user message
         get().addMessage({ role: "user", content });
-        set({ isLoading: true });// to show a loading state.
+        set({ isLoading: true }); // to show a loading state.
 
         const mod = await import("../lib/apiClient");
         const apiClient = mod.apiClient;
