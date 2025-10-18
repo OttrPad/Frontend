@@ -204,7 +204,7 @@ export function OptimizedBlock({
 
     try {
       await createBlockAt(insertAt, "code", block.lang || "python");
-      setTimeout(() => {
+      setTimeout(async () => {
         // Find the newest block at that position (store is refreshed by hook)
         const latest = useBlocksStore
           .getState()
@@ -214,17 +214,24 @@ export function OptimizedBlock({
           useBlocksStore
             .getState()
             .updateBlock(latest.id, { content: block.content });
-          // Update Yjs content for the duplicated block so peers receive it
+
+          // ✅ Update Yjs content for the duplicated block so peers receive it
           if (activeNotebookId) {
-            const ydoc =
-              socketCollaborationService.getYjsDocument(activeNotebookId) ||
-              socketCollaborationService.setupYjsDocument(activeNotebookId);
+            let ydoc =
+              socketCollaborationService.getYjsDocument(activeNotebookId);
+            if (!ydoc) {
+              ydoc = await socketCollaborationService.setupYjsDocument(
+                activeNotebookId
+              );
+            }
+
             const blockContent = ydoc.getMap<Y.Text>("blockContent");
             let ytext = blockContent.get(latest.id);
             if (!ytext) {
               ytext = new Y.Text();
               blockContent.set(latest.id, ytext);
             }
+
             ydoc.transact(() => {
               ytext!.delete(0, ytext!.length);
               ytext!.insert(0, block.content);
