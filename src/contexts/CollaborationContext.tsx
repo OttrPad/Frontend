@@ -12,8 +12,7 @@ import {
   socketCollaborationService,
   type NotebookInfo,
   type UserPresence,
-  type CodeChangeData,
-  type CursorPosition,
+  // type CodeChangeData,
 } from "../lib/socketCollaborationService";
 import type { Block, Lang } from "../types/workspace";
 
@@ -38,15 +37,14 @@ interface CollaborationContextType {
   deleteNotebook: (notebookId: string) => Promise<void>;
 
   activeUsers: UserPresence[];
-  sendCodeChange: (
-    blockId: string,
-    content: string,
-    cursorPosition: CursorPosition
-  ) => void;
-  sendCursorUpdate: (blockId: string, position: CursorPosition) => void;
 
   isLoadingNotebooks: boolean;
   isCreatingNotebook: boolean;
+
+  setLocalPresence: (
+    blockId: string | null,
+    cursor?: { line: number; column: number }
+  ) => void;
 }
 
 const CollaborationContext = createContext<CollaborationContextType | null>(
@@ -69,7 +67,6 @@ export function CollaborationProvider({
   const { session } = useUser();
   const { updateBlock } = useBlocksStore();
 
-  // state
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [notebooks, setNotebooks] = useState<NotebookInfo[]>([]);
@@ -77,9 +74,8 @@ export function CollaborationProvider({
   const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
-  // Removed execution session lifecycle (only /exec is used during runs)
 
-  // refs for stable usage in handlers
+  // Refs for stable handlers
   const activeNotebookIdRef = useRef<string | null>(null);
   useEffect(() => {
     activeNotebookIdRef.current = activeNotebookId;
@@ -90,10 +86,9 @@ export function CollaborationProvider({
     updateBlockRef.current = updateBlock;
   }, [updateBlock]);
 
-  // bind-once flag so we don’t double-attach listeners
   const listenersBoundRef = useRef(false);
 
-  /* ---------- REST loader (uses JWT inside service now) ---------- */
+  /* ---------- REST loader ---------- */
   const loadNotebooks = useCallback(async () => {
     try {
       setIsLoadingNotebooks(true);
@@ -110,10 +105,10 @@ export function CollaborationProvider({
     }
   }, []);
 
-  /* ---------- stable socket handlers ---------- */
+  /* ---------- socket event handlers ---------- */
+
   const handleNotebookHistory = useCallback(
     (data: { roomId: string; notebooks: NotebookInfo[] }) => {
-      // initial snapshot pushed by server on join
       setNotebooks(data.notebooks || []);
       if (data.notebooks?.length && !activeNotebookIdRef.current) {
         setActiveNotebookId(data.notebooks[0].id);
@@ -141,66 +136,41 @@ export function CollaborationProvider({
     setActiveNotebookId((id) => (id === data.notebookId ? null : id));
   }, []);
 
-  const handleCodeChanged = useCallback((data: CodeChangeData) => {
-    if (data.blockId && data.notebookId === activeNotebookIdRef.current) {
-      updateBlockRef.current(data.blockId, {
-        content: data.content,
-        updatedAt: Date.now(),
-      });
-    }
-  }, []);
+  const handleAwarenessUpdate = useCallback(
+    (data: { notebookId: string; states: UserPresence[] }) => {
+      setActiveUsers(data.states);
+    },
+    []
+  );
 
-  const handleCursorMoved = useCallback((data: UserPresence) => {
-    setActiveUsers((prev) => {
-      const filtered = prev.filter((u) => u.userId !== data.userId);
-      return [...filtered, data];
-    });
-  }, []);
-
-  const handleTypingStart = useCallback((data: UserPresence) => {
-    setActiveUsers((prev) => {
-      const updated = prev.map((u) =>
-        u.userId === data.userId
-          ? { ...u, isTyping: true, position: data.position }
-          : u
-      );
-      if (!updated.find((u) => u.userId === data.userId)) {
-        updated.push({ ...data, isTyping: true });
-      }
-      return updated;
-    });
-  }, []);
-
-  const handleTypingStop = useCallback((data: { userId: string }) => {
-    setActiveUsers((prev) =>
-      prev.map((u) =>
-        u.userId === data.userId ? { ...u, isTyping: false } : u
-      )
-    );
-  }, []);
+  // Code changes now handled by Yjs CRDT; can optionally keep legacy fallback:
+  // const handleCodeChanged = useCallback((data: CodeChangeData) => {
+  //   if (data.blockId && data.notebookId === activeNotebookIdRef.current) {
+  //     updateBlockRef.current(data.blockId, {
+  //       content: data.content,
+  //       updatedAt: Date.now(),
+  //     });
+  //   }
+  // }, []);
 
   const handleError = useCallback((error: { message?: string }) => {
     console.error("Collaboration error:", error);
     setConnectionError(error.message || "Unknown collaboration error");
   }, []);
 
-  /* ---------- connect -> bind listeners -> join -> load ---------- */
+  /* ---------- connect -> join -> bind listeners ---------- */
   useEffect(() => {
     if (!roomIdentifier || !session?.access_token) return;
-
     let cancelled = false;
 
     (async () => {
       try {
         setConnectionError(null);
-
-        // 1) connect socket
         await socketCollaborationService.connect(
           roomIdentifier,
           session.access_token
         );
 
-        // 2) bind listeners BEFORE join to avoid missing early notebook-history/notebook:created
         if (!listenersBoundRef.current) {
           socketCollaborationService.on(
             "notebook-history",
@@ -218,27 +188,18 @@ export function CollaborationProvider({
             "notebook:deleted",
             handleNotebookDeleted
           );
-          socketCollaborationService.on("code-changed", handleCodeChanged);
-          socketCollaborationService.on("cursor-moved", handleCursorMoved);
-          socketCollaborationService.on("typing-start", handleTypingStart);
-          socketCollaborationService.on("typing-stop", handleTypingStop);
+          socketCollaborationService.on(
+            "awareness-update",
+            handleAwarenessUpdate
+          ); // 🔵 NEW
           socketCollaborationService.on("error", handleError);
           listenersBoundRef.current = true;
         }
 
-        // 3) join room (server will emit notebook-history; if room empty,
-        //    it will create default and emit notebook:created)
         await socketCollaborationService.joinRoom(roomIdentifier);
-
         if (cancelled) return;
 
-        // 4) mark connected now that we’re in the room
         setIsConnected(true);
-
-        // (executor auto-start removed)
-
-        // 5) REST fallback (auth header now included in service)
-        //    If socket push didn’t arrive yet, this ensures the list appears.
         await loadNotebooks();
       } catch (err) {
         console.error("❌ Collaboration init failed:", err);
@@ -253,8 +214,6 @@ export function CollaborationProvider({
 
     return () => {
       cancelled = true;
-
-      // unbind listeners
       if (listenersBoundRef.current) {
         socketCollaborationService.off(
           "notebook-history",
@@ -272,17 +231,16 @@ export function CollaborationProvider({
           "notebook:deleted",
           handleNotebookDeleted
         );
-        socketCollaborationService.off("code-changed", handleCodeChanged);
-        socketCollaborationService.off("cursor-moved", handleCursorMoved);
-        socketCollaborationService.off("typing-start", handleTypingStart);
-        socketCollaborationService.off("typing-stop", handleTypingStop);
+        socketCollaborationService.off(
+          "awareness-update",
+          handleAwarenessUpdate
+        );
         socketCollaborationService.off("error", handleError);
         listenersBoundRef.current = false;
       }
 
       socketCollaborationService.disconnect();
       setIsConnected(false);
-      // (executor stop removed)
     };
   }, [
     roomIdentifier,
@@ -291,26 +249,34 @@ export function CollaborationProvider({
     handleNotebookCreated,
     handleNotebookUpdated,
     handleNotebookDeleted,
-    handleCodeChanged,
-    handleCursorMoved,
-    handleTypingStart,
-    handleTypingStop,
+    handleAwarenessUpdate,
     handleError,
     loadNotebooks,
   ]);
 
-  /* ---------- CRUD methods ---------- */
+  /* ---------- Local presence setter ---------- */
+  const setLocalPresence = useCallback(
+    (blockId: string | null, cursor?: { line: number; column: number }) => {
+      if (!session?.user?.id || !activeNotebookIdRef.current) return;
+      socketCollaborationService.setPresence(
+        activeNotebookIdRef.current,
+        {
+          userId: session.user.id,
+          userEmail: session.user.email ?? "",
+        },
+        cursor,
+        blockId || undefined
+      );
+    },
+    [session?.user?.id, session?.user?.email]
+  );
 
+  /* ---------- Notebook CRUD ---------- */
   const createNotebook = useCallback(async (title: string) => {
-    if (!socketCollaborationService.isConnected()) {
-      throw new Error("Not connected to collaboration service");
-    }
     try {
       setIsCreatingNotebook(true);
       const nb = await socketCollaborationService.createNotebook(title);
-      // optimistic: set active to what server returned
       setActiveNotebookId(nb.id);
-      // server will broadcast notebook:created -> upsert will keep list consistent
     } catch (error) {
       console.error("Failed to create notebook:", error);
       throw error;
@@ -321,26 +287,16 @@ export function CollaborationProvider({
 
   const renameNotebook = useCallback(
     async (notebookId: string, title: string) => {
-      if (!socketCollaborationService.isConnected()) {
-        throw new Error("Not connected to collaboration service");
-      }
-      try {
-        const updated = await socketCollaborationService.renameNotebook(
-          notebookId,
-          title
-        );
-        setNotebooks((prev) => upsertNotebook(prev, updated));
-      } catch (error) {
-        console.error("Failed to rename notebook:", error);
-        throw error;
-      }
+      const updated = await socketCollaborationService.renameNotebook(
+        notebookId,
+        title
+      );
+      setNotebooks((prev) => upsertNotebook(prev, updated));
     },
     []
   );
 
   const switchNotebook = useCallback(async (notebookId: string) => {
-    if (!socketCollaborationService.isConnected()) return;
-
     try {
       setActiveNotebookId(notebookId);
       const blockList = await socketCollaborationService.getBlocks(notebookId);
@@ -360,42 +316,12 @@ export function CollaborationProvider({
   }, []);
 
   const deleteNotebook = useCallback(async (notebookId: string) => {
-    if (!socketCollaborationService.isConnected()) return;
-    try {
-      await socketCollaborationService.deleteNotebookREST(notebookId);
-      setNotebooks((prev) => prev.filter((nb) => nb.id !== notebookId));
-      setActiveNotebookId((id) => (id === notebookId ? null : id));
-    } catch (error) {
-      console.error("Failed to delete notebook:", error);
-      throw error;
-    }
+    await socketCollaborationService.deleteNotebookREST(notebookId);
+    setNotebooks((prev) => prev.filter((nb) => nb.id !== notebookId));
+    setActiveNotebookId((id) => (id === notebookId ? null : id));
   }, []);
 
-  const sendCodeChange = useCallback(
-    (blockId: string, content: string, cursorPosition: CursorPosition) => {
-      const nbId = activeNotebookIdRef.current;
-      if (!socketCollaborationService.isConnected() || !nbId) return;
-
-      socketCollaborationService.sendCodeChange({
-        content,
-        cursorPosition,
-        notebookId: nbId,
-        blockId,
-      });
-    },
-    []
-  );
-
-  const sendCursorUpdate = useCallback(
-    (blockId: string, position: CursorPosition) => {
-      const nbId = activeNotebookIdRef.current;
-      if (!socketCollaborationService.isConnected() || !nbId) return;
-
-      socketCollaborationService.sendCursorMove(position, nbId, blockId);
-    },
-    []
-  );
-
+  /* ---------- Context value ---------- */
   const value: CollaborationContextType = {
     isConnected,
     connectionError,
@@ -406,10 +332,9 @@ export function CollaborationProvider({
     switchNotebook,
     deleteNotebook,
     activeUsers,
-    sendCodeChange,
-    sendCursorUpdate,
     isLoadingNotebooks,
     isCreatingNotebook,
+    setLocalPresence, // 🔵 added
   };
 
   return (

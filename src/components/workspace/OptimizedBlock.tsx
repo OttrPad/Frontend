@@ -21,6 +21,7 @@ import { BlockOutput } from "./BlockOutput";
 import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
 import type { Monaco } from "@monaco-editor/react";
+import * as Y from "yjs";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { useExecution } from "../../hooks/useExecution";
 import { useExecutionStatus } from "../../hooks/useExecutionStatus";
@@ -212,13 +213,22 @@ export function OptimizedBlock({
           useBlocksStore
             .getState()
             .updateBlock(latest.id, { content: block.content });
-          // Let peers show a visual hint (the server’s “block-content-changed” is UI-level)
-          socketCollaborationService.sendCodeChange({
-            notebookId: activeNotebookId,
-            blockId: latest.id,
-            content: block.content,
-            cursorPosition: { line: 0, column: 0 },
-          });
+          // Update Yjs content for the duplicated block so peers receive it
+          if (activeNotebookId) {
+            const ydoc =
+              socketCollaborationService.getYjsDocument(activeNotebookId) ||
+              socketCollaborationService.setupYjsDocument(activeNotebookId);
+            const blockContent = ydoc.getMap<Y.Text>("blockContent");
+            let ytext = blockContent.get(latest.id);
+            if (!ytext) {
+              ytext = new Y.Text();
+              blockContent.set(latest.id, ytext);
+            }
+            ydoc.transact(() => {
+              ytext!.delete(0, ytext!.length);
+              ytext!.insert(0, block.content);
+            });
+          }
         }
       }, 150);
     } catch (e) {

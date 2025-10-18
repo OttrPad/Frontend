@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import io from "socket.io-client";
+import { apiUrl, socketUrl } from "./constants";
 import * as Y from "yjs";
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+} from "y-protocols/awareness";
 
 export interface NotebookInfo {
   id: string;
@@ -47,23 +53,24 @@ export class SocketCollaborationService {
   private token: string | null = null;
   private roomId: string | null = null;
   private notebooks: Map<string, Y.Doc> = new Map();
+  private awarenessMap: Map<string, Awareness> = new Map();
   private activeUsers: Map<string, UserPresence> = new Map();
   private eventHandlers: Map<string, any[]> = new Map();
+
+  // Pending awareness updates
+  private pendingAwareness: { notebookId: string; update: Uint8Array }[] = [];
+  private initializedDocs: Set<string> = new Set();
 
   constructor() {
     this.setupEventHandlers();
   }
 
   private getApiBaseUrl(): string {
-    return process.env.NODE_ENV === "production"
-      ? "https://api.ottrpad.com"
-      : "http://localhost:4000";
+    return apiUrl;
   }
 
   private getSocketUrl(): string {
-    return process.env.NODE_ENV === "production"
-      ? "https://collab.ottrpad.com"
-      : "http://localhost:5002";
+    return socketUrl;
   }
 
   private setupEventHandlers() {
@@ -81,16 +88,11 @@ export class SocketCollaborationService {
       "block:created",
       "block:deleted",
       "block:moved",
-      // realtime collab
-      "code-changed",
-      "cursor-moved",
-      "selection-changed",
-      "typing-start",
-      "typing-stop",
-      "language-change",
       // yjs
       "yjs-update",
       "yjs-state",
+      // awareness updates
+      "awareness-update",
       // errors
       "error",
     ].forEach((evt) => this.eventHandlers.set(evt, []));
@@ -191,6 +193,11 @@ export class SocketCollaborationService {
     }
     this.notebooks.clear();
     this.activeUsers.clear();
+
+    //awareness clear
+    this.awarenessMap.forEach((a) => a.destroy?.());
+    this.awarenessMap.clear();
+
     this.roomId = null;
     this.token = null;
   }
@@ -238,52 +245,6 @@ export class SocketCollaborationService {
       this.emit("block:moved", data);
     });
 
-    // --- Realtime collaboration events
-    this.socket.on("code-changed", (data: any) => {
-      this.emit("code-changed", data);
-    });
-
-    this.socket.on("cursor-moved", (data: any) => {
-      this.activeUsers.set(data.userId, {
-        userId: data.userId,
-        userEmail: data.userEmail,
-        notebookId: data.notebookId,
-        blockId: data.blockId,
-        position: data.position,
-      });
-      this.emit("cursor-moved", data);
-    });
-
-    this.socket.on("selection-changed", (data: any) => {
-      this.emit("selection-changed", data);
-    });
-
-    this.socket.on("typing-start", (data: any) => {
-      const user: UserPresence = this.activeUsers.get(data.userId) || {
-        userId: data.userId,
-        userEmail: data.userEmail,
-      };
-      user.isTyping = true;
-      user.notebookId = data.notebookId;
-      user.blockId = data.blockId;
-      user.position = data.position;
-      this.activeUsers.set(data.userId, user);
-      this.emit("typing-start", data);
-    });
-
-    this.socket.on("typing-stop", (data: any) => {
-      const user = this.activeUsers.get(data.userId);
-      if (user) {
-        user.isTyping = false;
-        this.activeUsers.set(data.userId, user);
-      }
-      this.emit("typing-stop", data);
-    });
-
-    this.socket.on("language-change", (data: any) => {
-      this.emit("language-change", data);
-    });
-
     // --- YJS events
     this.socket.on("yjs-update", (data: any) => {
       this.handleYjsUpdate(data);
@@ -291,6 +252,66 @@ export class SocketCollaborationService {
 
     this.socket.on("yjs-state", (data: any) => {
       this.handleYjsState(data);
+      this.initializedDocs.add(data.notebookId);
+
+      // Apply any pending awareness updates now that doc is synced
+      const pending = this.pendingAwareness.filter(
+        (a) => a.notebookId === data.notebookId
+      );
+      pending.forEach(({ notebookId, update }) => {
+        try {
+          const awareness = this.getAwareness(notebookId);
+          applyAwarenessUpdate(awareness, update, "remote");
+        } catch (err) {
+          console.warn("⚠️ Skipped pending awareness:", err);
+        }
+      });
+      this.pendingAwareness = this.pendingAwareness.filter(
+        (a) => a.notebookId !== data.notebookId
+      );
+    });
+
+    // --- Awareness updates
+    this.socket.on("awareness-update", (data: any) => {
+      const update = Uint8Array.from(atob(data.update), (c) => c.charCodeAt(0));
+
+      // If doc not initialized yet, buffer the awareness update
+      if (
+        !this.notebooks.get(data.notebookId) ||
+        !this.initializedDocs.has(data.notebookId)
+      ) {
+        console.warn(
+          `⏳ Buffering awareness for ${data.notebookId} until Y.Doc ready`
+        );
+        this.pendingAwareness.push({ notebookId: data.notebookId, update });
+        return;
+      }
+
+      try {
+        const awareness = this.getAwareness(data.notebookId);
+        const ydoc = this.notebooks.get(data.notebookId);
+
+        // Skip applying if blocks not yet present
+        const blocks = ydoc?.getMap("blocks");
+        if (!blocks || blocks.size === 0) {
+          console.warn(
+            `⏳ Skipping awareness (no blocks yet) for ${data.notebookId}`
+          );
+          this.pendingAwareness.push({ notebookId: data.notebookId, update });
+          return;
+        }
+
+        applyAwarenessUpdate(awareness, update, "remote");
+
+        const states = Array.from(awareness.getStates().values());
+        console.log("📥 Received awareness update:", {
+          notebookId: data.notebookId,
+          states,
+        });
+        this.emit("awareness-update", { notebookId: data.notebookId, states });
+      } catch (err) {
+        console.error("Failed to apply awareness update:", err);
+      }
     });
 
     // --- Errors
@@ -522,89 +543,60 @@ export class SocketCollaborationService {
   }
 
   /* ===========================
-     Live collaboration emits
+     Awareness helpers
      =========================== */
 
-  sendCodeChange(data: CodeChangeData): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
+  getAwareness(notebookId: string): Awareness {
+    if (!this.awarenessMap.has(notebookId)) {
+      const ydoc = this.notebooks.get(notebookId);
+      if (!ydoc) throw new Error("Notebook Y.Doc not initialized");
+
+      const awareness = new Awareness(ydoc);
+      awareness.on("update", ({ added, updated, removed }: any) => {
+        const update = encodeAwarenessUpdate(awareness, [
+          ...added,
+          ...updated,
+          ...removed,
+        ]);
+        const updateBase64 = btoa(String.fromCharCode(...update));
+
+        // Log what we're sending
+        const states = Array.from(awareness.getStates().values());
+        console.log("📤 Sending awareness update:", {
+          notebookId,
+          clientId: ydoc.clientID,
+          localState: awareness.getLocalState(),
+          allStates: states,
+        });
+
+        this.socket?.emit("awareness-update", {
+          notebookId,
+          update: updateBase64,
+        });
+
+        const statesForEmit = Array.from(awareness.getStates().values());
+        this.emit("awareness-update", { notebookId, states: statesForEmit });
+      });
+
+      this.awarenessMap.set(notebookId, awareness);
     }
-
-    const changeData = {
-      ...data,
-      changeId:
-        data.changeId ||
-        `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    };
-
-    // Server listens for "code-changed"
-    this.socket.emit("code-changed", changeData);
+    return this.awarenessMap.get(notebookId)!;
   }
 
-  sendCursorMove(
-    position: CursorPosition,
-    notebookId?: string,
+  setPresence(
+    notebookId: string,
+    user: { userId: string; userEmail: string },
+    cursor?: CursorPosition,
     blockId?: string
   ): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    this.socket.emit("cursor-move", {
-      position,
+    const awareness = this.getAwareness(notebookId);
+    awareness.setLocalState({
+      userId: user.userId,
+      userEmail: user.userEmail,
       notebookId,
       blockId,
+      cursor,
     });
-  }
-
-  sendTextSelection(
-    startPos: CursorPosition,
-    endPos: CursorPosition,
-    notebookId?: string,
-    blockId?: string
-  ): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    this.socket.emit("selection-change", {
-      startPos,
-      endPos,
-      notebookId,
-      blockId,
-    });
-  }
-
-  startTyping(
-    position: CursorPosition,
-    notebookId?: string,
-    blockId?: string
-  ): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    this.socket.emit("typing-start", {
-      position,
-      notebookId,
-      blockId,
-    });
-  }
-
-  stopTyping(): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    this.socket.emit("typing-stop");
-  }
-
-  changeLanguage(language: string): void {
-    if (!this.socket) {
-      throw new Error("Not connected to collaboration service");
-    }
-
-    this.socket.emit("language-change", { language });
   }
 
   /* ===========================
@@ -612,12 +604,16 @@ export class SocketCollaborationService {
      =========================== */
 
   setupYjsDocument(notebookId: string): Y.Doc {
-    if (this.socket) {
-      this.socket.emit("request-yjs-state", { notebookId });
+    let ydoc = this.notebooks.get(notebookId);
+    if (!ydoc) {
+      ydoc = new Y.Doc();
+      this.notebooks.set(notebookId, ydoc);
     }
 
-    const ydoc = new Y.Doc();
+    // Request the current state AFTER registering the Y.Doc
+    this.socket?.emit("request-yjs-state", { notebookId });
 
+    // Listen for Yjs updates to broadcast them
     ydoc.on("update", (update: Uint8Array) => {
       if (this.socket) {
         const updateBase64 = btoa(String.fromCharCode(...update));
@@ -628,7 +624,7 @@ export class SocketCollaborationService {
       }
     });
 
-    this.notebooks.set(notebookId, ydoc);
+    console.log(`📘 setupYjsDocument registered for ${notebookId}`);
     return ydoc;
   }
 

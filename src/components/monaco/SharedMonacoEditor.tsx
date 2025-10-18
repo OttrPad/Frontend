@@ -6,6 +6,7 @@ import { MonacoBinding } from "y-monaco";
 import type { Block, Lang } from "../../types/workspace";
 import { useAppStore } from "../../store/workspace";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
+import { apiClient } from "../../lib/apiClient";
 
 interface ModelInfo {
   model: editor.ITextModel;
@@ -203,6 +204,8 @@ interface SharedMonacoEditorProps {
   onMonacoInit?: (monaco: Monaco) => void;
   height?: number;
   className?: string;
+  userId?: string;
+  userEmail?: string;
 }
 
 export function SharedMonacoEditor({
@@ -213,6 +216,8 @@ export function SharedMonacoEditor({
   onMonacoInit,
   height = 120,
   className = "",
+  userId,
+  userEmail,
 }: SharedMonacoEditorProps) {
   const { theme } = useAppStore();
   const [monaco, setMonaco] = useState<Monaco | null>(null);
@@ -223,9 +228,13 @@ export function SharedMonacoEditor({
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const currentContentListenerRef = useRef<{ dispose(): void } | null>(null);
+  const inlineCompletionDisposableRef = useRef<{ dispose(): void } | null>(
+    null
+  );
 
   // Keep current binding so we can dispose when switching blocks/notebooks
   const bindingRef = useRef<MonacoBinding | null>(null);
+  // Note: MonacoBinding manages selection/cursor awareness; no local tracking needed.
 
   // Ensure Y.Doc exists for this notebook
   useEffect(() => {
@@ -316,6 +325,94 @@ export function SharedMonacoEditor({
       monacoInstance.editor.setTheme(
         theme === "dark" ? "ottrpad-dark" : "ottrpad-light"
       );
+
+      inlineCompletionDisposableRef.current?.dispose();
+      inlineCompletionDisposableRef.current =
+        monacoInstance.languages.registerInlineCompletionsProvider("python", {
+          async provideInlineCompletions(model, position, _context, token) {
+            const textBefore = model.getValueInRange({
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            });
+
+            const textAfter = model.getValueInRange({
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: model.getLineCount(),
+              endColumn: model.getLineMaxColumn(model.getLineCount()),
+            });
+
+            const languageId = model.getLanguageId();
+
+            let cancellationRequested = token.isCancellationRequested;
+            let cancellationDisposable: { dispose(): void } | null = null;
+
+            try {
+              cancellationDisposable = token.onCancellationRequested(() => {
+                cancellationRequested = true;
+              });
+
+              if (cancellationRequested) {
+                return { items: [] };
+              }
+
+              const data = await apiClient.getAiSuggestion({
+                contextBefore: textBefore,
+                contextAfter: textAfter,
+                language: languageId,
+                cursor: {
+                  line: position.lineNumber,
+                  column: position.column,
+                },
+              });
+
+              if (cancellationRequested || token.isCancellationRequested) {
+                return { items: [] };
+              }
+
+              const suggestionTexts: string[] = [];
+
+              if (Array.isArray(data.items)) {
+                data.items.forEach((item) => {
+                  if (typeof item?.text === "string" && item.text.trim()) {
+                    suggestionTexts.push(item.text);
+                  }
+                });
+              }
+
+              if (
+                !suggestionTexts.length &&
+                typeof data.suggestion === "string"
+              ) {
+                suggestionTexts.push(data.suggestion);
+              }
+
+              if (!suggestionTexts.length) {
+                return { items: [] };
+              }
+
+              return {
+                items: suggestionTexts.map((text) => ({
+                  insertText: text,
+                  range: new monacoInstance.Range(
+                    position.lineNumber,
+                    position.column,
+                    position.lineNumber,
+                    position.column
+                  ),
+                })),
+              };
+            } catch (error) {
+              console.error("Inline suggestion failed", error);
+              return { items: [] };
+            } finally {
+              cancellationDisposable?.dispose();
+            }
+          },
+          freeInlineCompletions() {},
+        });
 
       if (editorContainerRef.current) {
         resizeObserverRef.current = new ResizeObserver(() => {
@@ -413,7 +510,8 @@ export function SharedMonacoEditor({
 
   // Yjs <-> Monaco binding for the focused block
   useEffect(() => {
-    if (!focusedBlockId || !notebookId || !editor) return;
+    if (!focusedBlockId || !notebookId || !editor || !userId || !userEmail)
+      return;
 
     // Ensure doc exists
     const ydoc =
@@ -432,7 +530,11 @@ export function SharedMonacoEditor({
       blockContent.set(focusedBlockId, ytext);
     }
 
-    // Bind Y.Text <-> current Monaco model
+    const awareness = socketCollaborationService.getAwareness(notebookId);
+
+    if (!awareness) return;
+
+    // Bind Y.Text <-> current Monaco model FIRST
     const model = editor.getModel();
     if (!model) return;
 
@@ -440,21 +542,173 @@ export function SharedMonacoEditor({
     bindingRef.current?.destroy();
     bindingRef.current = null;
 
+    // Generate consistent color for this user
+    const palette = [
+      "#ef4444",
+      "#3b82f6",
+      "#22c55e",
+      "#eab308",
+      "#a855f7",
+      "#f97316",
+    ];
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      hash = (hash << 5) - hash + userId.charCodeAt(i);
+    }
+    const color = palette[Math.abs(hash) % palette.length];
+
+    console.log(
+      "🎯 Setting up awareness for",
+      userEmail,
+      "in block",
+      focusedBlockId
+    );
+    console.log("   Current awareness clientID:", awareness.clientID);
+
+    // CRITICAL: MonacoBinding requires ONLY { user: { name, color } } in awareness
+    // Additional fields like userId/email/blockId can break it!
+    // Set this BEFORE creating the binding so MonacoBinding can read it
+    awareness.setLocalState({
+      user: {
+        name: userEmail.split("@")[0] || "User",
+        color,
+      },
+    });
+
+    console.log(
+      "   Set initial awareness state (MonacoBinding format):",
+      awareness.getLocalState()
+    );
+
+    // TEMPORARILY DISABLED: Test if cursors work without Proxy filtering
+    // If cursors appear, we know the Proxy was the issue
+    console.log(
+      "⚠️  TESTING: Using UNFILTERED awareness to debug cursor rendering"
+    );
+
+    // NOW create the MonacoBinding with UNFILTERED awareness (temporary debug)
     bindingRef.current = new MonacoBinding(
       ytext,
       model,
       new Set([editor]),
-      null
+      awareness // Use real awareness without Proxy
     );
+
+    console.log(
+      "   MonacoBinding created with filtered awareness for block:",
+      focusedBlockId
+    );
+
+    // CRITICAL: MonacoBinding only updates selections when cursor moves
+    // We need to manually trigger a selection change after binding is created
+    // Give MonacoBinding a moment to set up its selection listeners
+    setTimeout(() => {
+      // First, add our custom metadata
+      const currentState = awareness.getLocalState() || {};
+      awareness.setLocalState({
+        ...currentState,
+        userId,
+        email: userEmail,
+        blockId: focusedBlockId,
+      });
+
+      console.log("   Added custom metadata to awareness state");
+
+      // Force a cursor movement to trigger MonacoBinding's selection tracking
+      // This is a workaround: MonacoBinding doesn't set initial selections without an event
+      const currentPosition = editor.getPosition() || {
+        lineNumber: 1,
+        column: 1,
+      };
+
+      // Trigger selection change by programmatically selecting and deselecting
+      editor.setSelection({
+        startLineNumber: currentPosition.lineNumber,
+        startColumn: currentPosition.column,
+        endLineNumber: currentPosition.lineNumber,
+        endColumn: currentPosition.column,
+      });
+
+      // Ensure focus to activate cursor
+      editor.focus();
+
+      // Force a tiny cursor move and back to trigger the listener
+      setTimeout(() => {
+        const pos = editor.getPosition() || { lineNumber: 1, column: 1 };
+        editor.setPosition({
+          lineNumber: pos.lineNumber,
+          column: pos.column + 1,
+        });
+        setTimeout(() => {
+          editor.setPosition(pos);
+        }, 10);
+      }, 50);
+
+      // Check state after everything
+      setTimeout(() => {
+        console.log("   ✅ Final awareness state with selections:");
+        const finalState = awareness.getLocalState();
+        console.log("   My state:", finalState);
+        console.log(
+          "   All states:",
+          Array.from(awareness.getStates().entries()).map(([id, state]) => {
+            const s = state as Record<string, unknown>;
+            return {
+              clientId: id,
+              hasSelections: !!s?.selections,
+              user: s?.user,
+            };
+          })
+        );
+      }, 150);
+    }, 100);
+
+    // Let MonacoBinding manage selections/cursors in awareness to ensure proper relative positions.
+    // We only seed identity and blockId above; MonacoBinding will update 'selections' field.
+
+    // Debug: Listen to awareness changes to see what MonacoBinding is doing
+    const debugAwarenessListener = () => {
+      console.log("🔔 Awareness changed!");
+      const allStates = awareness.getStates();
+      console.log(`   Total states: ${allStates.size}`);
+      allStates.forEach((state, clientId) => {
+        const s = state as Record<string, unknown>;
+        console.log(`   Client ${clientId}:`, {
+          userId: s?.userId,
+          blockId: s?.blockId,
+          hasUser: !!s?.user,
+          hasSelections: !!s?.selections,
+          selectionsDetail: s?.selections,
+        });
+      });
+    };
+    awareness.on("change", debugAwarenessListener);
+
+    // Listen to cursor/selection changes in the editor
+    const cursorListener = editor.onDidChangeCursorPosition((e) => {
+      console.log("🖱️ Cursor position changed:", e.position);
+      // Check awareness state after cursor moves
+      setTimeout(() => {
+        const state = awareness.getLocalState();
+        console.log("   Local awareness after cursor move:", state);
+      }, 10);
+    });
 
     // Seed store once (so previews render content from Yjs)
     onContentChange(focusedBlockId, ytext.toString());
 
     return () => {
+      awareness.off("change", debugAwarenessListener);
+      cursorListener.dispose();
       bindingRef.current?.destroy();
       bindingRef.current = null;
+      // Clear awareness state when leaving
+      if (awareness) {
+        console.log("🧹 Cleaning up awareness for block:", focusedBlockId);
+        awareness.setLocalState(null);
+      }
     };
-  }, [focusedBlockId, notebookId, editor, onContentChange]);
+  }, [focusedBlockId, notebookId, editor, onContentChange, userId, userEmail]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -463,6 +717,7 @@ export function SharedMonacoEditor({
       modelManagerRef.current?.dispose();
       resizeObserverRef.current?.disconnect();
       bindingRef.current?.destroy();
+      inlineCompletionDisposableRef.current?.dispose();
     };
   }, []);
 

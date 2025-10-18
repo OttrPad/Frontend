@@ -1,6 +1,11 @@
 import supabase from "./supabaseClient";
 import { apiUrl } from "./constants";
-import type { Branch, MergeConflict, Block, MergeResult } from "../types/branch";
+import type {
+  Branch,
+  MergeConflict,
+  Block,
+  MergeResult,
+} from "../types/branch";
 
 const API_BASE_URL = apiUrl;
 
@@ -47,7 +52,7 @@ export interface ApiError {
   message?: string;
 }
 
-// Workspaces types
+// Workspaces types (used by Rooms UI and workspace picker)
 export interface WorkspaceSummary {
   workspace_id: number;
   name: string;
@@ -120,6 +125,29 @@ export interface CommitTimelineEntry {
   snapshot_json?: CommitSnapshot;
   snapshot?: CommitSnapshot; // Alias for compatibility
 }
+export interface AiSuggestionRequest {
+  contextBefore: string;
+  contextAfter: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionItem {
+  text: string;
+  language: string;
+  cursor: {
+    line: number;
+    column: number;
+  };
+}
+
+export interface AiSuggestionResponse {
+  items?: AiSuggestionItem[];
+  suggestion?: string;
+}
 
 // Custom error class for API errors
 export class ApiRequestError extends Error {
@@ -179,11 +207,11 @@ class ApiClient {
       }
 
       // Log the error for debugging
-      console.error('[API Client] Request failed:', {
+      console.error("[API Client] Request failed:", {
         endpoint,
         status: response.status,
         statusText: response.statusText,
-        errorData
+        errorData,
       });
 
       // Throw custom error with proper error codes
@@ -398,29 +426,37 @@ class ApiClient {
 
   // Helper method to resolve room code to room ID
   private async resolveRoomIdentifier(identifier: string): Promise<string> {
-    console.log('[API Client] Resolving room identifier:', identifier);
-    
+    console.log("[API Client] Resolving room identifier:", identifier);
+
     // If it's already a numeric ID, return as is
     if (/^\d+$/.test(identifier)) {
-      console.log('[API Client] Already numeric ID:', identifier);
+      console.log("[API Client] Already numeric ID:", identifier);
       return identifier;
     }
 
     // If it's a room code (format: xxx-xxx-xxx), find the room and get its ID
     if (/^[a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3}$/.test(identifier)) {
       try {
-        console.log('[API Client] Fetching all rooms to resolve code:', identifier);
+        console.log(
+          "[API Client] Fetching all rooms to resolve code:",
+          identifier
+        );
         const response = await this.getAllRooms();
         const room = response.rooms?.find((r) => r.room_code === identifier);
         if (room) {
-          console.log('[API Client] Resolved room code to ID:', identifier, '→', room.room_id);
+          console.log(
+            "[API Client] Resolved room code to ID:",
+            identifier,
+            "→",
+            room.room_id
+          );
           return room.room_id.toString();
         } else {
-          console.error('[API Client] Room not found for code:', identifier);
+          console.error("[API Client] Room not found for code:", identifier);
           throw new ApiRequestError("Room not found", "ROOM_NOT_FOUND", 404);
         }
       } catch (error) {
-        console.error('[API Client] Error resolving room identifier:', error);
+        console.error("[API Client] Error resolving room identifier:", error);
         if (error instanceof ApiRequestError) {
           throw error;
         }
@@ -433,7 +469,7 @@ class ApiClient {
     }
 
     // If we can't determine the format, assume it's a room ID
-    console.log('[API Client] Unknown format, assuming room ID:', identifier);
+    console.log("[API Client] Unknown format, assuming room ID:", identifier);
     return identifier;
   }
 
@@ -493,7 +529,7 @@ class ApiClient {
   }
 
   // Version Control System (VCS) methods
-  
+
   /**
    * Create a commit for a notebook
    */
@@ -550,10 +586,7 @@ class ApiClient {
   /**
    * Restore a commit
    */
-  async restoreCommit(params: {
-    roomId: string;
-    commitId: string;
-  }): Promise<{
+  async restoreCommit(params: { roomId: string; commitId: string }): Promise<{
     message: string;
     snapshot: CommitSnapshot;
   }> {
@@ -578,7 +611,10 @@ class ApiClient {
    */
   async getCommitTimeline(roomId: string): Promise<CommitTimelineEntry[]> {
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    const response = await this.request<{ message: string; timeline: CommitTimelineEntry[] }>(`/api/version-control/timeline/${resolvedRoomId}`);
+    const response = await this.request<{
+      message: string;
+      timeline: CommitTimelineEntry[];
+    }>(`/api/version-control/timeline/${resolvedRoomId}`);
     return response.timeline;
   }
 
@@ -652,9 +688,10 @@ class ApiClient {
     parentBranchId?: string;
     initialSnapshot?: { blocks: unknown[] };
   }): Promise<{ message: string; branch: Branch; initialCommitId?: string }> {
-    const { roomId, branchName, description, parentBranchId, initialSnapshot } = params;
+    const { roomId, branchName, description, parentBranchId, initialSnapshot } =
+      params;
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    
+
     return this.request("/api/version-control/branches", {
       method: "POST",
       body: JSON.stringify({
@@ -680,7 +717,9 @@ class ApiClient {
    */
   async getCurrentBranch(roomId: string): Promise<{ branch: Branch | null }> {
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    return this.request(`/api/version-control/branches/${resolvedRoomId}/current`);
+    return this.request(
+      `/api/version-control/branches/${resolvedRoomId}/current`
+    );
   }
 
   /**
@@ -699,10 +738,15 @@ class ApiClient {
     branchId: string;
     roomId: string;
     currentSnapshot?: { blocks: unknown[] };
-  }): Promise<{ message: string; branch: Branch; snapshot: CommitSnapshot; autoCommitId?: string }> {
+  }): Promise<{
+    message: string;
+    branch: Branch;
+    snapshot: CommitSnapshot;
+    autoCommitId?: string;
+  }> {
     const { branchId, roomId, currentSnapshot } = params;
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    
+
     return this.request(`/api/version-control/branches/${branchId}/checkout`, {
       method: "POST",
       body: JSON.stringify({ roomId: resolvedRoomId, currentSnapshot }),
@@ -782,7 +826,7 @@ class ApiClient {
     conflicts?: MergeConflict[];
   }> {
     const { sourceBranchId, targetBranchId, commitMessage } = params;
-    
+
     return this.request("/api/version-control/merge", {
       method: "POST",
       body: JSON.stringify({
@@ -803,16 +847,16 @@ class ApiClient {
   }): Promise<{ conflicts: MergeConflict[] }> {
     const { roomId, sourceBranchId, targetBranchId } = params;
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    
+
     let url = `/api/version-control/merge/conflicts/${resolvedRoomId}`;
     const queryParams = new URLSearchParams();
     if (sourceBranchId) queryParams.append("sourceBranchId", sourceBranchId);
     if (targetBranchId) queryParams.append("targetBranchId", targetBranchId);
-    
+
     if (queryParams.toString()) {
       url += `?${queryParams.toString()}`;
     }
-    
+
     return this.request(url);
   }
 
@@ -824,7 +868,7 @@ class ApiClient {
     resolution: Block | null;
   }): Promise<{ message: string; success: boolean }> {
     const { conflictId, resolution } = params;
-    
+
     return this.request(
       `/api/version-control/merge/conflicts/${conflictId}/resolve`,
       {
@@ -845,7 +889,7 @@ class ApiClient {
   }): Promise<{ message: string; success: boolean; mergeCommitId: string }> {
     const { roomId, sourceBranchId, targetBranchId, commitMessage } = params;
     const resolvedRoomId = await this.resolveRoomIdentifier(roomId);
-    
+
     return this.request("/api/version-control/merge/apply", {
       method: "POST",
       body: JSON.stringify({
@@ -865,18 +909,25 @@ class ApiClient {
     targetBranchId: string;
   }): Promise<{ diff: MergeResult }> {
     const { sourceBranchId, targetBranchId } = params;
-    
+
     const queryParams = new URLSearchParams({
       sourceBranchId,
       targetBranchId,
     });
-    
+
     return this.request(
       `/api/version-control/merge/diff?${queryParams.toString()}`
     );
+  }
+  async getAiSuggestion(
+    payload: AiSuggestionRequest
+  ): Promise<AiSuggestionResponse> {
+    return this.request(`/api/ai/suggest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 }
 
 // Export singleton instance
 export const apiClient = new ApiClient(API_BASE_URL);
-
