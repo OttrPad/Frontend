@@ -7,14 +7,22 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import type { Lang } from "../../types/workspace";
 
 interface BlockOutputProps {
   output?: string;
   error?: string;
   isRunning?: boolean;
+  language?: Lang;
 }
 
-export function BlockOutput({ output, error, isRunning }: BlockOutputProps) {
+export function BlockOutput({
+  output,
+  error,
+  isRunning,
+  language,
+}: BlockOutputProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   const hasContent = output || error || isRunning;
@@ -26,6 +34,8 @@ export function BlockOutput({ output, error, isRunning }: BlockOutputProps) {
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
   };
+
+  const isMarkdown = language === "markdown";
 
   return (
     <div className="border-t border-gray-700">
@@ -56,6 +66,11 @@ export function BlockOutput({ output, error, isRunning }: BlockOutputProps) {
                 <AlertCircle className="w-4 h-4 text-red-400" />
                 <span className="text-sm text-red-400">Error</span>
               </>
+            ) : isMarkdown ? (
+              <>
+                <Terminal className="w-4 h-4 text-purple-400" />
+                <span className="text-sm text-purple-400">Rendered</span>
+              </>
             ) : (
               <>
                 <Terminal className="w-4 h-4 text-green-400" />
@@ -84,10 +99,16 @@ export function BlockOutput({ output, error, isRunning }: BlockOutputProps) {
             </pre>
           )}
 
-          {output && (
+          {output && !isMarkdown && (
             <pre className="text-gray-300 text-sm font-mono whitespace-pre-wrap bg-gray-800/50 rounded p-3 border border-gray-600/30">
               {output}
             </pre>
+          )}
+
+          {output && isMarkdown && (
+            <div className="bg-card/40 rounded-md p-4 border border-border">
+              <MarkdownRenderer content={output} />
+            </div>
           )}
 
           {!isRunning && !output && !error && (

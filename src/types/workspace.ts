@@ -1,4 +1,4 @@
-export type Lang = "python" | "json" | "markdown";
+export type Lang = "python" | "markdown";
 
 export interface Block {
   id: string;

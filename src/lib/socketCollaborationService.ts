@@ -74,6 +74,12 @@ export class SocketCollaborationService {
     return socketUrl;
   }
 
+  private getCollabHttpUrl(): string {
+    // Convert ws:// to http:// for REST API calls
+    const wsUrl = this.getSocketUrl();
+    return wsUrl.replace(/^ws:/, "http:").replace(/^wss:/, "https:");
+  }
+
   private setupEventHandlers() {
     [
       // connection/room
@@ -87,6 +93,7 @@ export class SocketCollaborationService {
       "notebook:deleted",
       // blocks
       "block:created",
+      "block:updated",
       "block:deleted",
       "block:moved",
       // yjs
@@ -234,6 +241,11 @@ export class SocketCollaborationService {
     this.socket.on("block:created", (data: any) => {
       console.log("📦 Block created:", data);
       this.emit("block:created", data);
+    });
+
+    this.socket.on("block:updated", (data: any) => {
+      console.log("✏️ Block updated:", data);
+      this.emit("block:updated", data);
     });
 
     this.socket.on("block:deleted", (data: any) => {
@@ -540,6 +552,34 @@ export class SocketCollaborationService {
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || "Failed to move block");
+    }
+  }
+
+  async updateBlockLanguage(
+    notebookId: string,
+    blockId: string,
+    language: string
+  ): Promise<void> {
+    if (!this.token) {
+      throw new Error("Not connected to collaboration service");
+    }
+
+    // Call collab service directly since API Gateway doesn't proxy this route yet
+    const response = await fetch(
+      `${this.getCollabHttpUrl()}/api/collaboration/notebooks/${notebookId}/blocks/${blockId}/language`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      }
+    );
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || "Failed to update block language");
     }
   }
 

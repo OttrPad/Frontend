@@ -18,6 +18,7 @@ import {
 import { Button } from "../ui/button";
 import { CodePreview } from "../monaco/CodePreview";
 import { BlockOutput } from "./BlockOutput";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { BlockPresenceAvatars } from "./BlockPresenceAvatars";
 import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
@@ -41,7 +42,6 @@ interface OptimizedBlockProps {
 
 const LANGUAGE_OPTIONS: { value: Lang; label: string }[] = [
   { value: "python", label: "Python" },
-  { value: "json", label: "JSON" },
   { value: "markdown", label: "Markdown" },
 ];
 
@@ -83,6 +83,8 @@ export function OptimizedBlock({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const moreMenuDropdownRef = useRef<HTMLDivElement>(null);
 
   const {
     attributes,
@@ -100,8 +102,30 @@ export function OptimizedBlock({
   };
 
   const handleLanguageChange = (lang: Lang) => {
+    console.log("🎨 handleLanguageChange called:", {
+      blockId: block.id,
+      oldLang: block.lang,
+      newLang: lang,
+    });
     updateBlock(block.id, { lang });
     setShowLanguageSelect(false);
+
+    // Sync language change with the server
+    if (activeNotebookId) {
+      console.log("📡 Sending language update to server:", {
+        activeNotebookId,
+        blockId: block.id,
+        lang,
+      });
+      socketCollaborationService
+        .updateBlockLanguage(activeNotebookId, block.id, lang)
+        .then(() => console.log("✅ Language update sent successfully"))
+        .catch((err) =>
+          console.error("❌ Failed to update block language:", err)
+        );
+    } else {
+      console.warn("⚠️ No activeNotebookId, skipping server update");
+    }
   };
 
   const calculatePosition = useCallback(
@@ -131,14 +155,18 @@ export function OptimizedBlock({
       if (
         showLanguageSelect &&
         languageButtonRef.current &&
-        !languageButtonRef.current.contains(t)
+        !languageButtonRef.current.contains(t) &&
+        languageDropdownRef.current &&
+        !languageDropdownRef.current.contains(t)
       ) {
         setShowLanguageSelect(false);
       }
       if (
         showMoreMenu &&
         moreButtonRef.current &&
-        !moreButtonRef.current.contains(t)
+        !moreButtonRef.current.contains(t) &&
+        moreMenuDropdownRef.current &&
+        !moreMenuDropdownRef.current.contains(t)
       ) {
         setShowMoreMenu(false);
       }
@@ -149,6 +177,33 @@ export function OptimizedBlock({
 
   const handleRun = () => {
     if (!block.content.trim()) return;
+
+    // Markdown blocks render inline - unfocus to show rendered view
+    if (block.lang === "markdown") {
+      // Unfocus this block to trigger markdown rendering
+      if (isEditor) {
+        // Find another block to focus, or focus nothing
+        const currentIndex = blocks.findIndex((b) => b.id === block.id);
+        let nextBlockId: string | null = null;
+
+        // Try to focus the next block
+        if (currentIndex < blocks.length - 1) {
+          nextBlockId = blocks[currentIndex + 1].id;
+        }
+        // Otherwise try the previous block
+        else if (currentIndex > 0) {
+          nextBlockId = blocks[currentIndex - 1].id;
+        }
+
+        // Focus the next block (or null if this is the only block)
+        if (nextBlockId) {
+          onFocus(nextBlockId);
+        }
+      }
+      return;
+    }
+
+    // For Python code, execute via backend
     if (block.isRunning || globalRunning) return; // simple guard
     if (!execReady) return; // block execution while setting up
     runSingle(block.id);
@@ -335,6 +390,7 @@ export function OptimizedBlock({
               dropdownPosition &&
               createPortal(
                 <div
+                  ref={languageDropdownRef}
                   className="fixed z-[99999] bg-popover/90 backdrop-blur-xl border border-border rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] mt-1 block-dropdown-menu"
                   style={{
                     top: dropdownPosition.top,
@@ -396,24 +452,27 @@ export function OptimizedBlock({
                 />
               </div>
             )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRun}
-            disabled={!block.content.trim() || !execReady}
-            className={`h-7 px-2 text-xs ${
-              block.isRunning
-                ? "text-red-400 hover:text-red-300"
-                : "text-green-400 hover:text-green-300"
-            }`}
-            title={block.isRunning ? "Stop" : "Run Block (Shift+Enter)"}
-          >
-            {block.isRunning ? (
-              <Square className="w-3 h-3" />
-            ) : (
-              <Play className="w-3 h-3" />
-            )}
-          </Button>
+          {/* Hide Run button for markdown blocks */}
+          {block.lang !== "markdown" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRun}
+              disabled={!block.content.trim() || !execReady}
+              className={`h-7 px-2 text-xs ${
+                block.isRunning
+                  ? "text-red-400 hover:text-red-300"
+                  : "text-green-400 hover:text-green-300"
+              }`}
+              title={block.isRunning ? "Stop" : "Run Block (Shift+Enter)"}
+            >
+              {block.isRunning ? (
+                <Square className="w-3 h-3" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+            </Button>
+          )}
 
           <Button
             variant="ghost"
@@ -452,6 +511,7 @@ export function OptimizedBlock({
               moreMenuPosition &&
               createPortal(
                 <div
+                  ref={moreMenuDropdownRef}
                   className="fixed z-[99999] bg-popover/90 backdrop-blur-xl border border-border rounded-md shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] min-w-[140px] block-dropdown-menu"
                   style={{
                     top: moreMenuPosition.top,
@@ -526,6 +586,17 @@ export function OptimizedBlock({
                 data-block-id={block.id}
               />
             </div>
+          ) : block.lang === "markdown" && block.content.trim() ? (
+            // Render markdown inline in the notebook area
+            <div
+              className="bg-muted/40 backdrop-blur-sm rounded-md m-2 relative z-10 isolate cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+              style={{ minHeight: blockHeight }}
+              onClick={handleBlockFocus}
+            >
+              <div className="p-4">
+                <MarkdownRenderer content={block.content} />
+              </div>
+            </div>
           ) : (
             <div
               className="bg-muted/40 backdrop-blur-sm rounded-md m-2 relative z-10 isolate"
@@ -542,13 +613,16 @@ export function OptimizedBlock({
             </div>
           )}
 
-          {(block.output || block.error || block.isRunning) && (
-            <BlockOutput
-              output={block.output}
-              error={block.error}
-              isRunning={block.isRunning}
-            />
-          )}
+          {/* Only show output for non-markdown blocks */}
+          {block.lang !== "markdown" &&
+            (block.output || block.error || block.isRunning) && (
+              <BlockOutput
+                output={block.output}
+                error={block.error}
+                isRunning={block.isRunning}
+                language={block.lang}
+              />
+            )}
         </div>
       )}
     </div>
