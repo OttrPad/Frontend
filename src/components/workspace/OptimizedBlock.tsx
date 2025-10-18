@@ -18,6 +18,7 @@ import {
 import { Button } from "../ui/button";
 import { CodePreview } from "../monaco/CodePreview";
 import { BlockOutput } from "./BlockOutput";
+import { BlockPresenceAvatars } from "./BlockPresenceAvatars";
 import { useBlocksStore } from "../../store/workspace";
 import type { Block as BlockType, Lang } from "../../types/workspace";
 import type { Monaco } from "@monaco-editor/react";
@@ -333,6 +334,17 @@ export function OptimizedBlock({
         </div>
 
         <div className="flex items-center space-x-1">
+          {activeNotebookId &&
+            socketCollaborationService.getYjsDocument(activeNotebookId) && (
+              <div className="relative">
+                <BlockPresenceAvatars
+                  awareness={socketCollaborationService.getAwareness(
+                    activeNotebookId
+                  )}
+                  blockId={block.id}
+                />
+              </div>
+            )}
           <Button
             variant="ghost"
             size="sm"
