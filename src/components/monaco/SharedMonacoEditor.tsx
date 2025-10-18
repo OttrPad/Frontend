@@ -219,7 +219,13 @@ export function SharedMonacoEditor({
   userId,
   userEmail,
 }: SharedMonacoEditorProps) {
-  const { theme } = useAppStore();
+  const {
+    theme,
+    isLeftSidebarCollapsed,
+    isRightSidebarCollapsed,
+    sidebarWidth,
+    rightPanelWidth,
+  } = useAppStore();
   const [monaco, setMonaco] = useState<Monaco | null>(null);
   const [editor, setEditor] = useState<editor.IStandaloneCodeEditor | null>(
     null
@@ -472,6 +478,37 @@ export function SharedMonacoEditor({
       editor.layout();
     }
   }, [theme, monaco, editor]);
+
+  // Force layout update when container size changes (e.g., sidebar resize)
+  useEffect(() => {
+    if (!editor) return;
+
+    let resizeTimeout: NodeJS.Timeout;
+    const handleResize = () => {
+      // Debounce to avoid excessive layout calls
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        editor.layout();
+      }, 100);
+    };
+
+    // Listen for window resize events
+    window.addEventListener("resize", handleResize);
+
+    // Trigger layout when sidebar state or width changes
+    handleResize();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, [
+    editor,
+    isLeftSidebarCollapsed,
+    isRightSidebarCollapsed,
+    sidebarWidth,
+    rightPanelWidth,
+  ]);
 
   // Switch editor model when focused block changes (keeps your shared editor UX)
   useEffect(() => {
@@ -793,10 +830,11 @@ export function SharedMonacoEditor({
     <div
       ref={editorContainerRef}
       className={`shared-monaco-editor ${className}`}
-      style={{ height }}
+      style={{ height, width: "100%", maxWidth: "100%", overflow: "hidden" }}
     >
       <Editor
         height={height}
+        width="100%"
         defaultLanguage="python"
         defaultValue=""
         beforeMount={handleBeforeMount}
