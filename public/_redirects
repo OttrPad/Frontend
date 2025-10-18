@@ -1,0 +1,5 @@
+# Proxy API calls to your backend server. Adjust the target as needed.
+/api/*  http://157.230.246.60:4000/api/:splat  200
+
+# SPA fallback for client-side routing
+/* /index.html 200

@@ -25,12 +25,14 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
 import { apiClient } from "../../lib/apiClient";
+import { useUser } from "../../hooks/useUser";
 interface OptimizedNotebookAreaProps {
   roomId: string;
 }
 
 export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   const { blocks, updateBlock } = useBlocksStore();
+  const { session } = useUser();
 
   const { activeNotebookId } = useCollaboration();
   const { createBlockAt /*, deleteBlock*/ } =
@@ -445,18 +447,26 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
                 ref={setSharedEditor}
                 className="shared-monaco-editor-container"
               >
-                <MonacoErrorBoundary>
-                  <SharedMonacoEditor
-                    focusedBlockId={focusedBlockId}
-                    // keep this prop if your editor expects it
-                    notebookId={activeNotebookId}
-                    blocks={blocks}
-                    onContentChange={handleContentChange}
-                    onMonacoInit={handleMonacoInit}
-                    height={editorPositionRef.current.height}
-                    className="rounded-md overflow-hidden"
-                  />
-                </MonacoErrorBoundary>
+                {focusedBlockId && (
+                  <div
+                    ref={setSharedEditor}
+                    className="shared-monaco-editor-container"
+                  >
+                    <MonacoErrorBoundary>
+                      <SharedMonacoEditor
+                        focusedBlockId={focusedBlockId}
+                        notebookId={activeNotebookId}
+                        blocks={blocks}
+                        onContentChange={handleContentChange}
+                        onMonacoInit={handleMonacoInit}
+                        height={editorPositionRef.current.height}
+                        className="rounded-md overflow-hidden"
+                        userId={session?.user?.id}
+                        userEmail={session?.user?.email || ""}
+                      />
+                    </MonacoErrorBoundary>
+                  </div>
+                )}
               </div>
             )}
           </>
