@@ -126,9 +126,9 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
     }
   };
 
-  const handleCreateMilestone = async (message: string) => {
+  const handleCreateMilestone = async (message: string, notes?: string) => {
     try {
-      await saveMilestone(roomId, message);
+      await saveMilestone(roomId, message, notes || "");
       toast.success("Milestone created successfully!");
     } catch {
       toast.error("Failed to create milestone");

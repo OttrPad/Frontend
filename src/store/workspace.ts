@@ -80,6 +80,7 @@ interface MilestonesState {
   ) => Promise<void>;
   fetchCommits: (roomId: string) => Promise<void>;
   restoreCommit: (roomId: string, commitId: string) => Promise<void>;
+  revertLatestCommit: (roomId: string) => Promise<void>;
   setMilestones: (milestones: Milestone[]) => void;
   setCommits: (commits: Commit[]) => void;
 }
@@ -437,8 +438,8 @@ export const useMilestonesStore = create<MilestonesState>()(
             milestoneNotes: notes || "",
           });
 
-          // Fetch updated milestones
-          await get().fetchMilestones(roomId);
+          // Refresh the timeline to show the new milestone
+          await get().fetchCommits(roomId);
         } catch (error) {
           console.error("Failed to save milestone:", error);
           throw error;
@@ -476,14 +477,8 @@ export const useMilestonesStore = create<MilestonesState>()(
         try {
           await apiClient.deleteMilestone({ roomId, milestoneId });
 
-          // Remove from local state
-          set((state) => ({
-            milestones: state.milestones.filter((m) => m.id !== milestoneId),
-            selectedMilestoneId:
-              state.selectedMilestoneId === milestoneId
-                ? null
-                : state.selectedMilestoneId,
-          }));
+          // Refresh the timeline to update the view
+          await get().fetchCommits(roomId);
         } catch (error) {
           console.error("Failed to delete milestone:", error);
           throw error;
@@ -545,7 +540,8 @@ export const useMilestonesStore = create<MilestonesState>()(
         set({ isLoading: true });
         try {
           const timeline = await apiClient.getCommitTimeline(roomId);
-          set({ commits: timeline });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          set({ commits: timeline as any });
         } catch (error) {
           console.error("Failed to fetch commits:", error);
         } finally {
@@ -571,6 +567,62 @@ export const useMilestonesStore = create<MilestonesState>()(
           }
         } catch (error) {
           console.error("Failed to restore commit:", error);
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      revertLatestCommit: async (roomId) => {
+        set({ isLoading: true });
+        try {
+          // Step 1: Get the current timeline to find the previous commit
+          const timeline = await apiClient.getCommitTimeline(roomId);
+
+          // Find the latest commit and the one before it
+          let previousCommitId: string | null = null;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const commits = (timeline as any).filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (item: any) => item.type === "commit"
+          );
+
+          if (commits.length > 1) {
+            // The second commit in the list is the previous one (timeline is newest first)
+            previousCommitId = commits[1].id;
+          }
+
+          // Step 2: If there's a previous commit, restore it first
+          if (previousCommitId) {
+            console.log("Restoring previous commit:", previousCommitId);
+            const restoreResponse = await apiClient.restoreCommit({
+              roomId,
+              commitId: previousCommitId,
+            });
+
+            // Update blocks with restored snapshot
+            if (restoreResponse.snapshot?.blocks) {
+              const blocks = restoreResponse.snapshot.blocks.map(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (block: any) => ({
+                  ...block,
+                  lang: (block.lang as Lang) || "python",
+                })
+              );
+              useBlocksStore.setState({ blocks });
+            }
+          }
+
+          // Step 3: Now revert (hide) the latest commit
+          const response = await apiClient.revertLatestCommit(roomId);
+          console.log("Reverted commit:", response.revertedCommit);
+
+          // Step 4: Refresh the timeline to remove the reverted commit
+          const updatedTimeline = await apiClient.getCommitTimeline(roomId);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          set({ commits: updatedTimeline as any });
+        } catch (error) {
+          console.error("Failed to revert commit:", error);
           throw error;
         } finally {
           set({ isLoading: false });
