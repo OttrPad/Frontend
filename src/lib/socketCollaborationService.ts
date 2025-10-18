@@ -561,19 +561,23 @@ export class SocketCollaborationService {
         ]);
         const updateBase64 = btoa(String.fromCharCode(...update));
 
-        // Log what we're sending
-        const states = Array.from(awareness.getStates().values());
-        console.log("📤 Sending awareness update:", {
-          notebookId,
-          clientId: ydoc.clientID,
-          localState: awareness.getLocalState(),
-          allStates: states,
-        });
+        // Only emit to server when OUR client changed (avoid echo loops)
+        const changed = new Set<number>([...added, ...updated, ...removed]);
+        if (changed.has(ydoc.clientID)) {
+          // Log what we're sending
+          const states = Array.from(awareness.getStates().values());
+          console.log("📤 Sending awareness update:", {
+            notebookId,
+            clientId: ydoc.clientID,
+            localState: awareness.getLocalState(),
+            allStates: states,
+          });
 
-        this.socket?.emit("awareness-update", {
-          notebookId,
-          update: updateBase64,
-        });
+          this.socket?.emit("awareness-update", {
+            notebookId,
+            update: updateBase64,
+          });
+        }
 
         const statesForEmit = Array.from(awareness.getStates().values());
         this.emit("awareness-update", { notebookId, states: statesForEmit });

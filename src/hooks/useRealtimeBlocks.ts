@@ -5,7 +5,7 @@ import {
 } from "../lib/socketCollaborationService";
 import { useBlocksStore } from "../store/workspace";
 import type { Lang } from "../types/workspace";
-import * as Y from "yjs";
+// import * as Y from "yjs"; // No longer needed - Yjs handled in SharedMonacoEditor
 
 type Block = {
   id: string;
@@ -37,29 +37,36 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
       reorderBlocks: (from: number, to: number) => void;
     };
 
+  // DISABLED: This conflicts with switchNotebook in CollaborationContext
+  // which already loads blocks with Yjs content. This hook was overwriting
+  // content with empty strings, causing the "content clears" bug.
+  //
+  // The switchNotebook flow now handles initial block loading with Yjs content.
+  // This hook still handles real-time updates (block:created, block:deleted, block:moved)
+
   // Load current blocks when notebook changes (source of truth = server)
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (!activeNotebookId) return;
-      try {
-        const list = await socketCollaborationService.getBlocks(
-          activeNotebookId
-        );
-        if (!cancelled) {
-          setBlocks(
-            list.sort((a, b) => a.position - b.position).map(mapBlockInfo)
-          );
-        }
-      } catch (e) {
-        console.error("Failed to load blocks:", e);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeNotebookId, setBlocks]);
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   const load = async () => {
+  //     if (!activeNotebookId) return;
+  //     try {
+  //       const list = await socketCollaborationService.getBlocks(
+  //         activeNotebookId
+  //       );
+  //       if (!cancelled) {
+  //         setBlocks(
+  //           list.sort((a, b) => a.position - b.position).map(mapBlockInfo)
+  //         );
+  //       }
+  //     } catch (e) {
+  //       console.error("Failed to load blocks:", e);
+  //     }
+  //   };
+  //   load();
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, [activeNotebookId, setBlocks]);
 
   // Socket -> Store
   useEffect(() => {
@@ -103,87 +110,92 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
     };
   }, [activeNotebookId, upsertBlock, removeBlock, setBlocks]);
 
-  useEffect(() => {
-    if (!activeNotebookId) return;
+  // DISABLED: Yjs setup and content observation is now handled in SharedMonacoEditor
+  // This was causing duplicate hydration and potential race conditions.
+  // The MonacoBinding in SharedMonacoEditor handles Y.Text <-> Monaco sync,
+  // and the store is updated via Monaco's onDidChangeContent listener.
 
-    (async () => {
-      let ydoc = socketCollaborationService.getYjsDocument(activeNotebookId);
-      if (!ydoc) {
-        ydoc = await socketCollaborationService.setupYjsDocument(
-          activeNotebookId
-        );
-      }
-
-      if (!ydoc) return; // Safety check
-
-      const stateBase64 = await socketCollaborationService.requestYjsState(
-        activeNotebookId
-      );
-      if (stateBase64) {
-        const update = Uint8Array.from(atob(stateBase64), (c) =>
-          c.charCodeAt(0)
-        );
-        Y.applyUpdate(ydoc, update);
-        console.log("📥 Hydrated Yjs doc for", activeNotebookId);
-      }
-
-      const blockContentMap = ydoc.getMap<Y.Text>("blockContent");
-      const observers = new Map<string, (e: Y.YTextEvent) => void>();
-
-      // Attach observer to a Y.Text
-      const attachObserver = (blockId: string, ytext: Y.Text) => {
-        if (observers.has(blockId)) return;
-
-        const observer = () => {
-          const content = ytext.toString();
-          // keep React store mirrored with Yjs content
-          useBlocksStore.getState().updateBlock(blockId, { content });
-        };
-
-        ytext.observe(observer);
-        observers.set(blockId, observer);
-
-        // Seed the store once when attaching
-        const initial = ytext.toString();
-        useBlocksStore.getState().updateBlock(blockId, { content: initial });
-      };
-
-      // Attach to existing Y.Text entries
-      blockContentMap.forEach((ytext, key) => {
-        if (ytext instanceof Y.Text) attachObserver(key, ytext);
-      });
-
-      // Watch for adds/updates/deletes of entries in the map
-      const mapObserver = (event: Y.YMapEvent<Y.Text>) => {
-        event.changes.keys.forEach((change, key) => {
-          if (change.action === "add" || change.action === "update") {
-            const ytext = blockContentMap.get(key);
-            if (ytext instanceof Y.Text) attachObserver(key, ytext);
-          } else if (change.action === "delete") {
-            const ytext = blockContentMap.get(key);
-            const fn = observers.get(key);
-            if (ytext && fn) ytext.unobserve(fn);
-            observers.delete(key);
-            // also remove content from store if you want:
-            // useBlocksStore.getState().removeBlock(key);
-          }
-        });
-      };
-
-      blockContentMap.observe(mapObserver);
-
-      return () => {
-        blockContentMap.unobserve(mapObserver);
-        observers.forEach((fn, key) => {
-          const ytext = blockContentMap.get(key);
-          if (ytext) ytext.unobserve(fn);
-        });
-        observers.clear();
-
-        socketCollaborationService.cleanupAwarenessExcept(activeNotebookId);
-      };
-    })();
-  }, [activeNotebookId]);
+  // useEffect(() => {
+  //   if (!activeNotebookId) return;
+  //
+  //   (async () => {
+  //     let ydoc = socketCollaborationService.getYjsDocument(activeNotebookId);
+  //     if (!ydoc) {
+  //       ydoc = await socketCollaborationService.setupYjsDocument(
+  //         activeNotebookId
+  //       );
+  //     }
+  //
+  //     if (!ydoc) return; // Safety check
+  //
+  //     const stateBase64 = await socketCollaborationService.requestYjsState(
+  //       activeNotebookId
+  //     );
+  //     if (stateBase64) {
+  //       const update = Uint8Array.from(atob(stateBase64), (c) =>
+  //         c.charCodeAt(0)
+  //       );
+  //       Y.applyUpdate(ydoc, update);
+  //       console.log("📥 Hydrated Yjs doc for", activeNotebookId);
+  //     }
+  //
+  //     const blockContentMap = ydoc.getMap<Y.Text>("blockContent");
+  //     const observers = new Map<string, (e: Y.YTextEvent) => void>();
+  //
+  //     // Attach observer to a Y.Text
+  //     const attachObserver = (blockId: string, ytext: Y.Text) => {
+  //       if (observers.has(blockId)) return;
+  //
+  //       const observer = () => {
+  //         const content = ytext.toString();
+  //         // keep React store mirrored with Yjs content
+  //         useBlocksStore.getState().updateBlock(blockId, { content });
+  //       };
+  //
+  //       ytext.observe(observer);
+  //       observers.set(blockId, observer);
+  //
+  //       // Seed the store once when attaching
+  //       const initial = ytext.toString();
+  //       useBlocksStore.getState().updateBlock(blockId, { content: initial });
+  //     };
+  //
+  //     // Attach to existing Y.Text entries
+  //     blockContentMap.forEach((ytext, key) => {
+  //       if (ytext instanceof Y.Text) attachObserver(key, ytext);
+  //     });
+  //
+  //     // Watch for adds/updates/deletes of entries in the map
+  //     const mapObserver = (event: Y.YMapEvent<Y.Text>) => {
+  //       event.changes.keys.forEach((change, key) => {
+  //         if (change.action === "add" || change.action === "update") {
+  //           const ytext = blockContentMap.get(key);
+  //           if (ytext instanceof Y.Text) attachObserver(key, ytext);
+  //         } else if (change.action === "delete") {
+  //           const ytext = blockContentMap.get(key);
+  //           const fn = observers.get(key);
+  //           if (ytext && fn) ytext.unobserve(fn);
+  //           observers.delete(key);
+  //           // also remove content from store if you want:
+  //           // useBlocksStore.getState().removeBlock(key);
+  //         }
+  //       });
+  //     };
+  //
+  //     blockContentMap.observe(mapObserver);
+  //
+  //     return () => {
+  //       blockContentMap.unobserve(mapObserver);
+  //       observers.forEach((fn, key) => {
+  //         const ytext = blockContentMap.get(key);
+  //         if (ytext) ytext.unobserve(fn);
+  //       });
+  //       observers.clear();
+  //
+  //       socketCollaborationService.cleanupAwarenessExcept(activeNotebookId);
+  //     };
+  //   })();
+  // }, [activeNotebookId]);
 
   // Actions (REST -> server will broadcast -> this hook upserts/deletes)
   const createBlockAt = useCallback(

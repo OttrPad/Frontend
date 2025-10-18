@@ -487,16 +487,9 @@ export function SharedMonacoEditor({
     const block = blocks.find((b) => b.id === focusedBlockId);
     if (!block) return;
 
-    // Prevent overwriting hydrated Yjs state
-    const ydoc = socketCollaborationService.getYjsDocument(notebookId!);
-    const ytext = ydoc?.getMap<Y.Text>("blockContent").get(block.id);
-
-    if (ytext && ytext.toString().length > 0 && !block.content.trim()) {
-      console.log(
-        "🛑 Skip overwriting Monaco with empty block content (Yjs already hydrated)"
-      );
-      return;
-    }
+    // We no longer return early here. We'll always set the model for the new block,
+    // and let the Yjs binding hydrate Monaco content shortly after.
+    // This avoids races that could leave the editor with no model bound.
 
     try {
       // stop previous model -> store sync listener
@@ -516,7 +509,7 @@ export function SharedMonacoEditor({
       editor.setScrollTop(0);
       editor.revealLine(1);
 
-      // keep store in sync for previews
+      // keep store in sync for previews (focused block typing)
       currentContentListenerRef.current = model.onDidChangeContent(() => {
         const content = model.getValue();
         onContentChange(focusedBlockId, content);
@@ -526,7 +519,7 @@ export function SharedMonacoEditor({
     } catch (error) {
       console.error("Error switching editor model:", error);
     }
-  }, [focusedBlockId, blocks, editor, monaco, onContentChange]);
+  }, [focusedBlockId, blocks, editor, monaco, onContentChange, notebookId]);
 
   // Yjs <-> Monaco binding for the focused block
   useEffect(() => {
@@ -775,13 +768,24 @@ export function SharedMonacoEditor({
     };
   }, []);
 
-  // Keep models in sync if external block content changes (e.g., Yjs updates updating store)
+  // Keep models in sync if external block content changes
   useEffect(() => {
     if (!modelManagerRef.current) return;
     blocks.forEach((block) => {
-      modelManagerRef.current?.updateModelContent(block.id, block.content);
+      // Avoid clearing Monaco content with empty strings when Yjs is the source of truth
+      // If we have a Yjs document for the current notebook and incoming content is empty,
+      // skip forced updates here; the Yjs binding will manage the content.
+      // This primarily protects the focused block from being cleared during notebook switches.
+      const shouldSkipEmptyUpdate =
+        !!notebookId &&
+        (!block.content || block.content.length === 0) &&
+        !!socketCollaborationService.getYjsDocument(notebookId);
+
+      if (!shouldSkipEmptyUpdate) {
+        modelManagerRef.current?.updateModelContent(block.id, block.content);
+      }
     });
-  }, [blocks]);
+  }, [blocks, notebookId]);
 
   if (!focusedBlockId) return null;
 
