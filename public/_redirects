@@ -1,8 +1,2 @@
-# API Proxy - Forward API requests to backend
-/api/*  https://api.ottrpad.dev:4000/api/:splat  200
-
-# WebSocket Proxy - Forward WebSocket connections to collab service
-/socket.io/*  https://api.ottrpad.dev:5002/socket.io/:splat  200
-
-# Client-side routing - All other routes to index.html for React Router
+# Client-side routing - All routes to index.html for React Router
 /*    /index.html   200
