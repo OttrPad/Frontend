@@ -5,7 +5,7 @@ import {
 } from "../lib/socketCollaborationService";
 import { useBlocksStore } from "../store/workspace";
 import type { Lang } from "../types/workspace";
-// import * as Y from "yjs"; // No longer needed - Yjs handled in SharedMonacoEditor
+import * as Y from "yjs";
 
 type Block = {
   id: string;
@@ -28,7 +28,7 @@ function mapBlockInfo(b: BlockInfo): Block {
 }
 
 export function useRealtimeBlocks(activeNotebookId: string | null) {
-  const { setBlocks, upsertBlock, removeBlock } =
+  const { setBlocks, upsertBlock, removeBlock, updateBlock } =
     useBlocksStore() as unknown as {
       setBlocks: (blocks: Block[]) => void;
       upsertBlock: (block: Block) => void;
@@ -74,7 +74,28 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
 
     const onCreated = (data: { notebookId: string; block: BlockInfo }) => {
       if (data.notebookId !== activeNotebookId) return;
-      upsertBlock(mapBlockInfo(data.block));
+
+      // Get Yjs content for the newly created block so other users can see it immediately
+      const ydoc = socketCollaborationService.getYjsDocument(activeNotebookId);
+      let content = "";
+
+      if (ydoc) {
+        const blockContent = ydoc.getMap("blockContent");
+        const ytext = blockContent.get(data.block.id);
+        if (ytext && typeof ytext.toString === "function") {
+          content = ytext.toString();
+        }
+      }
+
+      // Create block with actual Yjs content instead of empty string
+      upsertBlock({
+        id: data.block.id,
+        lang: (data.block.language as Lang) || "python",
+        content: content,
+        createdAt: data.block.createdAt,
+        updatedAt: data.block.updatedAt,
+        position: data.block.position,
+      });
     };
 
     const onDeleted = (data: { notebookId: string; blockId: string }) => {
@@ -109,6 +130,85 @@ export function useRealtimeBlocks(activeNotebookId: string | null) {
       socketCollaborationService.off("block:moved", onMoved);
     };
   }, [activeNotebookId, upsertBlock, removeBlock, setBlocks]);
+
+  // Listen to Yjs updates for block content to update the preview
+  // This ensures that when other users type in blocks, the preview shows their changes
+  useEffect(() => {
+    if (!activeNotebookId) return;
+
+    const ydoc = socketCollaborationService.getYjsDocument(activeNotebookId);
+    if (!ydoc) return;
+
+    const blockContentMap = ydoc.getMap("blockContent");
+    const observers = new Map<string, () => void>();
+
+    // Attach observer to a Y.Text for preview updates
+    const attachObserver = (blockId: string, ytext: Y.Text) => {
+      if (observers.has(blockId)) return;
+      if (!ytext || typeof ytext.toString !== "function") return;
+
+      const observer = () => {
+        const content = ytext.toString();
+        // Update the store so the preview shows the latest content
+        updateBlock(blockId, { content });
+      };
+
+      ytext.observe(observer);
+      observers.set(blockId, observer);
+
+      // Immediately sync initial content
+      const initial = ytext.toString();
+      if (initial) {
+        updateBlock(blockId, { content: initial });
+      }
+    };
+
+    // Attach to existing Y.Text entries
+    blockContentMap.forEach((ytext, key) => {
+      if (ytext instanceof Y.Text) {
+        attachObserver(key, ytext);
+      }
+    });
+
+    // Watch for new Y.Text entries being added (new blocks)
+    const mapObserver = (event: Y.YMapEvent<unknown>) => {
+      event.changes.keys.forEach((change, key) => {
+        if (change.action === "add" || change.action === "update") {
+          const ytext = blockContentMap.get(key);
+          if (ytext instanceof Y.Text) {
+            attachObserver(key, ytext);
+          }
+        } else if (change.action === "delete") {
+          const fn = observers.get(key);
+          if (fn) {
+            const ytext = blockContentMap.get(key);
+            if (ytext instanceof Y.Text) {
+              ytext.unobserve(fn);
+            }
+            observers.delete(key);
+          }
+        }
+      });
+    };
+
+    blockContentMap.observe(mapObserver);
+
+    return () => {
+      blockContentMap.unobserve(mapObserver);
+      observers.forEach((fn, key) => {
+        const ytext = blockContentMap.get(key);
+        if (ytext instanceof Y.Text) {
+          ytext.unobserve(fn);
+        }
+      });
+      observers.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNotebookId]);
+
+  // DISABLED: Initial Yjs setup and content observation was causing duplicate hydration
+  // The above lightweight observer only updates preview content when Yjs changes
+  // The MonacoBinding in SharedMonacoEditor handles Y.Text <-> Monaco sync
 
   // DISABLED: Yjs setup and content observation is now handled in SharedMonacoEditor
   // This was causing duplicate hydration and potential race conditions.
