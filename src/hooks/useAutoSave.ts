@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '../store/workspace';
-import { apiClient } from '../lib/apiClient';
+import { useEffect, useRef, useCallback } from "react";
+import { useBlocksStore } from "../store/workspace";
+// Removed unused imports to fix TS6133
 
 interface AutoSaveOptions {
   roomId: string;
@@ -9,12 +9,12 @@ interface AutoSaveOptions {
   enableLocalStorage?: boolean; // Enable localStorage backup (default: true)
 }
 
-const LOCAL_STORAGE_KEY = 'ottrpad_unsaved_blocks';
-const LOCAL_STORAGE_TIMESTAMP_KEY = 'ottrpad_unsaved_timestamp';
+const LOCAL_STORAGE_KEY = "ottrpad_unsaved_blocks";
+const LOCAL_STORAGE_TIMESTAMP_KEY = "ottrpad_unsaved_timestamp";
 
 /**
  * Custom hook to auto-save notebook blocks and prevent data loss
- * 
+ *
  * Features:
  * - Auto-save every N seconds
  * - Save on tab close/page unload
@@ -22,7 +22,7 @@ const LOCAL_STORAGE_TIMESTAMP_KEY = 'ottrpad_unsaved_timestamp';
  * - Debounced manual save trigger
  * - localStorage backup layer
  * - Recovery dialog on mount
- * 
+ *
  * @example
  * ```tsx
  * const { triggerSave, hasUnsavedChanges, lastSaveTime } = useAutoSave({
@@ -39,8 +39,8 @@ export function useAutoSave(options: AutoSaveOptions) {
     enableLocalStorage = true,
   } = options;
 
-  const { blocks, currentRoom } = useAppStore();
-  
+  const { blocks } = useBlocksStore();
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const lastSaveTimeRef = useRef<number>(Date.now());
@@ -51,12 +51,12 @@ export function useAutoSave(options: AutoSaveOptions) {
    */
   const saveBlocks = useCallback(async () => {
     if (isSavingRef.current) {
-      console.log('⏸️ [AutoSave] Save already in progress, skipping');
+      console.log("⏸️ [AutoSave] Save already in progress, skipping");
       return;
     }
 
     if (!blocks || blocks.length === 0) {
-      console.log('⏸️ [AutoSave] No blocks to save');
+      console.log("⏸️ [AutoSave] No blocks to save");
       return;
     }
 
@@ -68,28 +68,30 @@ export function useAutoSave(options: AutoSaveOptions) {
       if (enableLocalStorage) {
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(blocks));
-          localStorage.setItem(LOCAL_STORAGE_TIMESTAMP_KEY, Date.now().toString());
-          console.log('✅ [AutoSave] Saved to localStorage');
+          localStorage.setItem(
+            LOCAL_STORAGE_TIMESTAMP_KEY,
+            Date.now().toString()
+          );
+          console.log("✅ [AutoSave] Saved to localStorage");
         } catch (err) {
-          console.error('❌ [AutoSave] localStorage save failed:', err);
+          console.error("❌ [AutoSave] localStorage save failed:", err);
         }
       }
 
       // Save to server (if needed - depends on your API structure)
       // Note: Blocks are auto-saved through collaboration system
       // This is an additional safety layer
-      
+
       lastSaveTimeRef.current = Date.now();
-      console.log('✅ [AutoSave] Save completed successfully');
+      console.log("✅ [AutoSave] Save completed successfully");
 
       // Clear localStorage backup after successful server save
       if (enableLocalStorage) {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
         localStorage.removeItem(LOCAL_STORAGE_TIMESTAMP_KEY);
       }
-
     } catch (error) {
-      console.error('❌ [AutoSave] Save failed:', error);
+      console.error("❌ [AutoSave] Save failed:", error);
     } finally {
       isSavingRef.current = false;
     }
@@ -113,7 +115,7 @@ export function useAutoSave(options: AutoSaveOptions) {
    */
   const checkForUnsavedBlocks = useCallback((): {
     hasUnsaved: boolean;
-    blocks: any[] | null;
+    blocks: unknown[] | null;
     timestamp: number | null;
   } => {
     if (!enableLocalStorage) {
@@ -127,15 +129,15 @@ export function useAutoSave(options: AutoSaveOptions) {
       if (savedBlocks && savedTimestamp) {
         const blocks = JSON.parse(savedBlocks);
         const timestamp = parseInt(savedTimestamp, 10);
-        
+
         // Only consider it unsaved if it's less than 5 minutes old
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
         if (timestamp > fiveMinutesAgo) {
           return { hasUnsaved: true, blocks, timestamp };
         }
       }
     } catch (err) {
-      console.error('❌ [AutoSave] Error checking for unsaved blocks:', err);
+      console.error("❌ [AutoSave] Error checking for unsaved blocks:", err);
     }
 
     return { hasUnsaved: false, blocks: null, timestamp: null };
@@ -151,7 +153,7 @@ export function useAutoSave(options: AutoSaveOptions) {
 
     // Set up periodic auto-save
     intervalRef.current = setInterval(() => {
-      console.log('⏰ [AutoSave] Periodic save triggered');
+      console.log("⏰ [AutoSave] Periodic save triggered");
       saveBlocks();
     }, interval);
 
@@ -167,17 +169,20 @@ export function useAutoSave(options: AutoSaveOptions) {
    * Save on page unload (tab close, browser close, refresh)
    */
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      console.log('🚪 [AutoSave] Page unloading, saving blocks...');
-      
+    const handleBeforeUnload = () => {
+      console.log("🚪 [AutoSave] Page unloading, saving blocks...");
+
       // Save to localStorage (synchronous)
       if (enableLocalStorage && blocks && blocks.length > 0) {
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(blocks));
-          localStorage.setItem(LOCAL_STORAGE_TIMESTAMP_KEY, Date.now().toString());
-          console.log('✅ [AutoSave] Saved to localStorage on unload');
+          localStorage.setItem(
+            LOCAL_STORAGE_TIMESTAMP_KEY,
+            Date.now().toString()
+          );
+          console.log("✅ [AutoSave] Saved to localStorage on unload");
         } catch (err) {
-          console.error('❌ [AutoSave] Failed to save on unload:', err);
+          console.error("❌ [AutoSave] Failed to save on unload:", err);
         }
       }
 
@@ -185,10 +190,10 @@ export function useAutoSave(options: AutoSaveOptions) {
       // localStorage is our safety net
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [blocks, enableLocalStorage]);
 
@@ -198,15 +203,15 @@ export function useAutoSave(options: AutoSaveOptions) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log('👁️ [AutoSave] Tab hidden, saving blocks...');
+        console.log("👁️ [AutoSave] Tab hidden, saving blocks...");
         saveBlocks();
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [saveBlocks]);
 
@@ -225,15 +230,17 @@ export function useAutoSave(options: AutoSaveOptions) {
     triggerSave,
     saveBlocks,
     checkForUnsavedBlocks,
-    hasUnsavedChanges: blocks && blocks.length > 0 && 
-      (Date.now() - lastSaveTimeRef.current > debounceDelay),
+    hasUnsavedChanges:
+      blocks &&
+      blocks.length > 0 &&
+      Date.now() - lastSaveTimeRef.current > debounceDelay,
     lastSaveTime: lastSaveTimeRef.current,
   };
 }
 
 /**
  * Helper hook to keep execution container alive with heartbeat pings
- * 
+ *
  * @example
  * ```tsx
  * useContainerHeartbeat({ roomId: '123', containerId: 'abc' });
@@ -249,23 +256,25 @@ export function useContainerHeartbeat(options: {
   useEffect(() => {
     if (!roomId || !containerId) return;
 
-    console.log(`💓 [Heartbeat] Starting container heartbeat with ${interval}ms interval`);
+    console.log(
+      `💓 [Heartbeat] Starting container heartbeat with ${interval}ms interval`
+    );
 
     const sendHeartbeat = async () => {
       try {
-        const response = await fetch('/api/execution/heartbeat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/execution/heartbeat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roomId, containerId }),
         });
 
         if (response.ok) {
-          console.log('✅ [Heartbeat] Ping successful');
+          console.log("✅ [Heartbeat] Ping successful");
         } else {
-          console.warn('⚠️ [Heartbeat] Ping failed:', response.statusText);
+          console.warn("⚠️ [Heartbeat] Ping failed:", response.statusText);
         }
       } catch (error) {
-        console.error('❌ [Heartbeat] Ping error:', error);
+        console.error("❌ [Heartbeat] Ping error:", error);
       }
     };
 
@@ -277,7 +286,7 @@ export function useContainerHeartbeat(options: {
 
     return () => {
       clearInterval(heartbeatInterval);
-      console.log('💔 [Heartbeat] Stopped container heartbeat');
+      console.log("💔 [Heartbeat] Stopped container heartbeat");
     };
   }, [roomId, containerId, interval]);
 }
