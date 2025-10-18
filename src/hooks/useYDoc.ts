@@ -8,12 +8,18 @@ export function useYDoc(notebookId: string | null) {
   useEffect(() => {
     if (!notebookId) return;
 
-    // The service returns the Y.Doc
-    const ydoc = socketCollaborationService.setupYjsDocument(notebookId);
-    ydocRef.current = ydoc;
+    // The service returns a Promise<Y.Doc>, so we need to await it
+    let ydoc: Y.Doc | null = null;
+
+    socketCollaborationService.setupYjsDocument(notebookId).then((doc) => {
+      ydoc = doc;
+      ydocRef.current = doc;
+    });
 
     return () => {
-      ydoc.destroy();
+      if (ydoc) {
+        ydoc.destroy();
+      }
       ydocRef.current = null;
     };
   }, [notebookId]);

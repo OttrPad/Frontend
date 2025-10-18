@@ -15,7 +15,6 @@ interface CodePreviewProps {
 const getMonacoLanguage = (lang: Lang): string => {
   const languageMap: Record<Lang, string> = {
     python: "python",
-    json: "json",
     markdown: "markdown",
   };
   return languageMap[lang] || "plaintext";
