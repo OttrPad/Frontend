@@ -244,7 +244,40 @@ export function OptimizedBlock({
     }
   };
 
-  const handleToggleCollapse = () => {
+  const handleToggleCollapse = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // If this is the active/focused block, we need to switch focus before collapsing
+    if (isEditor && !block.collapsed) {
+      // User is trying to collapse the active block
+      const currentIndex = blocks.findIndex((b) => b.id === block.id);
+
+      // Find the next available block to focus on
+      let nextBlockId: string | null = null;
+
+      // Try to focus the next block
+      if (currentIndex < blocks.length - 1) {
+        nextBlockId = blocks[currentIndex + 1].id;
+      }
+      // If no next block, try previous block
+      else if (currentIndex > 0) {
+        nextBlockId = blocks[currentIndex - 1].id;
+      }
+
+      // Only allow collapse if there's another block to switch to
+      if (nextBlockId) {
+        onFocus(nextBlockId); // Switch focus to the other block
+        // Collapse after a small delay to ensure focus switch happens first
+        setTimeout(() => {
+          updateBlock(block.id, { collapsed: true });
+        }, 50);
+      }
+      // If this is the only block, don't allow collapsing the active editor
+      return;
+    }
+
+    // For non-active blocks or expanding, just toggle normally
     updateBlock(block.id, { collapsed: !block.collapsed });
   };
 
@@ -329,8 +362,19 @@ export function OptimizedBlock({
 
           <button
             onClick={handleToggleCollapse}
-            className="text-muted-foreground hover:text-orange-400 transition-colors"
-            title={block.collapsed ? "Expand" : "Collapse"}
+            disabled={isEditor && !block.collapsed && blocks.length === 1}
+            className={`transition-colors ${
+              isEditor && !block.collapsed && blocks.length === 1
+                ? "text-muted-foreground/30 cursor-not-allowed"
+                : "text-muted-foreground hover:text-orange-400"
+            }`}
+            title={
+              isEditor && !block.collapsed && blocks.length === 1
+                ? "Cannot collapse the only active block"
+                : block.collapsed
+                ? "Expand"
+                : "Collapse"
+            }
           >
             {block.collapsed ? (
               <ChevronRight className="w-4 h-4" />

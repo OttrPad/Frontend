@@ -16,14 +16,20 @@ import {
   Lock,
   GitCommit,
   GitBranch,
+  Download,
 } from "lucide-react";
-import { useAppStore, useMilestonesStore } from "../../store/workspace";
+import {
+  useAppStore,
+  useMilestonesStore,
+  useBlocksStore,
+} from "../../store/workspace";
 import { useExecution } from "../../hooks/useExecution";
 import { useExecutionStatus } from "../../hooks/useExecutionStatus";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { SaveMilestoneDialog } from "../modals/SaveMilestoneDialog";
 import { CommitDialog } from "../modals/CommitDialog";
 import { toast } from "react-toastify";
+import { useCollaboration } from "../../hooks/useCollaboration";
 
 interface EditorTopbarProps {
   roomId: string;
@@ -32,6 +38,8 @@ interface EditorTopbarProps {
 export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const { theme, toggleTheme, toggleLeftSidebar, toggleRightSidebar } =
     useAppStore();
+  const { blocks } = useBlocksStore();
+  const { notebooks, activeNotebookId } = useCollaboration();
   const { saveMilestone, createCommit } = useMilestonesStore();
   const { runAll, isRunning, stop } = useExecution(roomId);
   const navigate = useNavigate();
@@ -130,6 +138,122 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Room link copied to clipboard!");
+  };
+
+  const handleExportNotebook = () => {
+    if (!activeNotebookId) {
+      toast.error("No active notebook to export");
+      return;
+    }
+
+    setShowSettingsMenu(false);
+
+    try {
+      // Find the active notebook
+      const activeNotebook = notebooks.find((nb) => nb.id === activeNotebookId);
+      const notebookTitle = activeNotebook?.title || "notebook";
+
+      // Convert blocks to Jupyter notebook format
+      const cells = blocks
+        .sort((a, b) => a.position - b.position)
+        .map((block) => {
+          // Determine cell type
+          let cellType = "code";
+          if (block.lang === "markdown") {
+            cellType = "markdown";
+          }
+
+          // Create cell structure
+          const cell: {
+            cell_type: string;
+            metadata: Record<string, unknown>;
+            source: string[];
+            execution_count?: null;
+            outputs?: Array<Record<string, unknown>>;
+          } = {
+            cell_type: cellType,
+            metadata: {},
+            source: block.content.split("\n").map((line) => line + "\n"),
+          };
+
+          // Remove trailing newline from last line
+          if (cell.source.length > 0) {
+            const lastIndex = cell.source.length - 1;
+            cell.source[lastIndex] = cell.source[lastIndex].replace(/\n$/, "");
+          }
+
+          // Add execution_count and outputs for code cells
+          if (cellType === "code") {
+            cell.execution_count = null;
+            cell.outputs = [];
+
+            // If there's output, add it
+            if (block.output) {
+              cell.outputs.push({
+                output_type: "stream",
+                name: "stdout",
+                text: block.output.split("\n").map((line) => line + "\n"),
+              });
+            }
+
+            // If there's an error, add it
+            if (block.error) {
+              cell.outputs.push({
+                output_type: "error",
+                ename: "Error",
+                evalue: block.error,
+                traceback: [block.error],
+              });
+            }
+          }
+
+          return cell;
+        });
+
+      // Create the Jupyter notebook structure
+      const notebook = {
+        cells,
+        metadata: {
+          kernelspec: {
+            display_name: "Python 3",
+            language: "python",
+            name: "python3",
+          },
+          language_info: {
+            name: "python",
+            version: "3.10.0",
+            mimetype: "text/x-python",
+            codemirror_mode: {
+              name: "ipython",
+              version: 3,
+            },
+            pygments_lexer: "ipython3",
+            nbconvert_exporter: "python",
+            file_extension: ".py",
+          },
+        },
+        nbformat: 4,
+        nbformat_minor: 5,
+      };
+
+      // Create blob and download
+      const blob = new Blob([JSON.stringify(notebook, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${notebookTitle.replace(/\s+/g, "_")}.ipynb`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("Notebook exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export notebook");
+    }
   };
 
   return (
@@ -313,6 +437,15 @@ export function EditorTopbar({ roomId }: EditorTopbarProps) {
                   }}
                 >
                   <div className="py-1">
+                    <button
+                      onClick={handleExportNotebook}
+                      className="flex items-center w-full px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                      disabled={!activeNotebookId}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Export as .ipynb
+                    </button>
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
                     <button
                       onClick={handleLeaveRoom}
                       className="flex items-center w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
