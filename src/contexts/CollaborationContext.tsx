@@ -15,6 +15,7 @@ import {
   // type CodeChangeData,
 } from "../lib/socketCollaborationService";
 import type { Block, Lang } from "../types/workspace";
+import * as Y from "yjs";
 
 /* ---------- helpers ---------- */
 function upsertNotebook(list: NotebookInfo[], item: NotebookInfo) {
@@ -45,6 +46,8 @@ interface CollaborationContextType {
     blockId: string | null,
     cursor?: { line: number; column: number }
   ) => void;
+
+  hydratingNotebookId: string | null;
 }
 
 const CollaborationContext = createContext<CollaborationContextType | null>(
@@ -74,6 +77,9 @@ export function CollaborationProvider({
   const [activeUsers, setActiveUsers] = useState<UserPresence[]>([]);
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
+  const [hydratingNotebookId, setHydratingNotebookId] = useState<string | null>(
+    null
+  );
 
   // Refs for stable handlers
   const activeNotebookIdRef = useRef<string | null>(null);
@@ -298,20 +304,55 @@ export function CollaborationProvider({
 
   const switchNotebook = useCallback(async (notebookId: string) => {
     try {
+      setHydratingNotebookId(notebookId);
       setActiveNotebookId(notebookId);
+
+      // 1️⃣ Ensure Y.Doc exists
+      let ydoc = socketCollaborationService.getYjsDocument(notebookId);
+      if (!ydoc) {
+        ydoc = await socketCollaborationService.setupYjsDocument(notebookId);
+        console.log("🧩 Created new Y.Doc for notebook:", notebookId);
+      }
+
+      // 2️⃣ Apply server state BEFORE updating blocks
+      const stateBase64 = await socketCollaborationService.requestYjsState(
+        notebookId
+      );
+      if (stateBase64) {
+        const update = Uint8Array.from(atob(stateBase64), (c) =>
+          c.charCodeAt(0)
+        );
+        Y.applyUpdate(ydoc, update);
+        console.log("📥 Yjs state applied for notebook:", notebookId);
+      } else {
+        console.warn("⚠️ No Yjs state returned for notebook:", notebookId);
+      }
+
+      // 3️⃣ Load block structure (metadata only)
       const blockList = await socketCollaborationService.getBlocks(notebookId);
       const convertedBlocks: Block[] = blockList.map((b) => ({
         id: b.id,
         lang: (b.language as Lang) || "python",
-        content: "",
+        content: "", // hydrated by Y.Text later
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
         position: b.position,
       }));
-      console.log("Loaded blocks for notebook:", notebookId, convertedBlocks);
+
+      // 4️⃣ Update block store only AFTER Yjs snapshot applied
+      useBlocksStore
+        .getState()
+        .setBlocks(convertedBlocks.sort((a, b) => a.position - b.position));
+
+      // 5️⃣ Clean up old awareness (keeps memory safe)
+      socketCollaborationService.cleanupAwarenessExcept(notebookId);
+
+      console.log("🔄 Switched to notebook:", notebookId);
     } catch (error) {
       console.error("Failed to switch notebook:", error);
       setConnectionError("Failed to load notebook");
+    } finally {
+      setHydratingNotebookId(null);
     }
   }, []);
 
@@ -327,6 +368,7 @@ export function CollaborationProvider({
     connectionError,
     notebooks,
     activeNotebookId,
+    hydratingNotebookId,
     createNotebook,
     renameNotebook,
     switchNotebook,

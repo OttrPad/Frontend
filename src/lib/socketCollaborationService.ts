@@ -7,6 +7,7 @@ import {
   applyAwarenessUpdate,
   encodeAwarenessUpdate,
 } from "y-protocols/awareness";
+import { IndexeddbPersistence } from "y-indexeddb";
 
 export interface NotebookInfo {
   id: string;
@@ -599,33 +600,58 @@ export class SocketCollaborationService {
     });
   }
 
+  cleanupAwarenessExcept(activeNotebookId: string) {
+    for (const [nbId, awareness] of this.awarenessMap.entries()) {
+      if (nbId !== activeNotebookId) {
+        try {
+          awareness.destroy?.();
+        } catch (err) {
+          console.warn("Error destroying awareness:", err);
+        }
+        this.awarenessMap.delete(nbId);
+        console.log("🧹 Destroyed stale awareness for", nbId);
+      }
+    }
+  }
+
   /* ===========================
      YJS integration
      =========================== */
 
-  setupYjsDocument(notebookId: string): Y.Doc {
+  async setupYjsDocument(notebookId: string): Promise<Y.Doc> {
     let ydoc = this.notebooks.get(notebookId);
-    if (!ydoc) {
-      ydoc = new Y.Doc();
-      this.notebooks.set(notebookId, ydoc);
-    }
+    if (ydoc) return ydoc;
 
-    // Request the current state AFTER registering the Y.Doc
-    this.socket?.emit("request-yjs-state", { notebookId });
+    ydoc = new Y.Doc();
+    this.notebooks.set(notebookId, ydoc);
 
-    // Listen for Yjs updates to broadcast them
-    ydoc.on("update", (update: Uint8Array) => {
-      if (this.socket) {
-        const updateBase64 = btoa(String.fromCharCode(...update));
-        this.socket.emit("yjs-update", {
-          notebookId,
-          update: updateBase64,
-        });
-      }
+    const persistence = new IndexeddbPersistence(
+      `notebook-${notebookId}`,
+      ydoc
+    );
+    persistence.once("synced", () => {
+      console.log(`💾 IndexedDB loaded for ${notebookId}`);
     });
 
-    console.log(`📘 setupYjsDocument registered for ${notebookId}`);
-    return ydoc;
+    this.socket?.emit("request-yjs-state", { notebookId });
+
+    // Keep broadcasting changes to the server
+    ydoc.on("update", (update: Uint8Array) => {
+      const updateBase64 = btoa(String.fromCharCode(...update));
+      this.socket?.emit("yjs-update", { notebookId, update: updateBase64 });
+    });
+
+    return new Promise((resolve) => {
+      const onState = (data: any) => {
+        if (data.notebookId !== notebookId) return;
+        const state = Uint8Array.from(atob(data.state), (c) => c.charCodeAt(0));
+        Y.applyUpdate(ydoc!, state);
+        this.initializedDocs.add(notebookId); // <-- add this line
+        this.socket?.off("yjs-state", onState);
+        resolve(ydoc!);
+      };
+      this.socket?.on("yjs-state", onState);
+    });
   }
 
   getYjsDocument(notebookId: string): Y.Doc | null {
@@ -654,6 +680,28 @@ export class SocketCollaborationService {
     } catch (error) {
       console.error("Failed to apply YJS state:", error);
     }
+  }
+
+  async requestYjsState(notebookId: string): Promise<string | null> {
+    if (!this.socket) return null;
+
+    return new Promise((resolve) => {
+      const handler = (data: { notebookId: string; state: string }) => {
+        if (data.notebookId === notebookId) {
+          this.socket?.off("yjs-state", handler);
+          resolve(data.state || null);
+        }
+      };
+
+      this.socket.on("yjs-state", handler);
+      this.socket.emit("request-yjs-state", { notebookId });
+
+      // Fallback timeout to avoid hanging
+      setTimeout(() => {
+        this.socket?.off("yjs-state", handler);
+        resolve(null);
+      }, 3000);
+    });
   }
 
   /* ===========================

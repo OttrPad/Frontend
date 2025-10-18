@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useContext } from "react";
 import {
   DndContext,
   closestCenter,
@@ -21,11 +21,12 @@ import { useIntersectionVirtualization } from "../../hooks/useVirtualization";
 import { Button } from "../ui/button";
 import { Plus, FileText } from "lucide-react";
 import type { Monaco } from "@monaco-editor/react";
-import { useCollaboration } from "../../hooks/useCollaboration";
 import { useRealtimeBlocks } from "../../hooks/useRealtimeBlocks";
 import { socketCollaborationService } from "../../lib/socketCollaborationService";
 import { apiClient } from "../../lib/apiClient";
 import { useUser } from "../../hooks/useUser";
+import { CollaborationContext } from "../../contexts/CollaborationContext";
+
 interface OptimizedNotebookAreaProps {
   roomId: string;
 }
@@ -34,7 +35,8 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
   const { blocks, updateBlock } = useBlocksStore();
   const { session } = useUser();
 
-  const { activeNotebookId } = useCollaboration();
+  const { activeNotebookId, hydratingNotebookId } =
+    useContext(CollaborationContext)!;
   const { createBlockAt /*, deleteBlock*/ } =
     useRealtimeBlocks(activeNotebookId);
   const [isDragging, setIsDragging] = useState(false);
@@ -263,6 +265,14 @@ export function OptimizedNotebookArea({ roomId }: OptimizedNotebookAreaProps) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [focusedBlockId, blocks, handleAddBlockAt]);
+
+  if (hydratingNotebookId === activeNotebookId) {
+    return (
+      <div className="flex h-full items-center justify-center text-gray-400">
+        Loading notebook content...
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-transparent flex flex-col">
