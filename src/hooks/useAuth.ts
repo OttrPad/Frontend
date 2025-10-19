@@ -41,15 +41,20 @@ export function useAuth(): AuthState {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    // Clear execution run outputs and reset running flag on logout
     try {
-      const runStore = useRunStore.getState();
-      runStore.clearOutputs();
-      useRunStore.setState({ isRunning: false });
-    } catch (e) {
-      // Non-fatal; log and continue
-      console.warn("Failed to clear run store on sign out", e);
+      // Use default signOut; Supabase JS v2 clears session and cookie in browser
+      await supabase.auth.signOut();
+    } finally {
+      // Clear local UI state
+      try {
+        const runStore = useRunStore.getState();
+        runStore.clearOutputs();
+        useRunStore.setState({ isRunning: false });
+      } catch (e) {
+        console.warn("Failed to clear run store on sign out", e);
+      }
+      // Force a full reload to the login page for reliability in production
+      window.location.replace(`${window.location.origin}/`);
     }
   };
 

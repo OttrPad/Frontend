@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useMilestonesStore, useBlocksStore } from "../../../store/workspace";
+import { useBranchStore } from "../../../store/branch";
 import { Button } from "../../ui/button";
 import {
   GitBranch,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { MonacoDiff } from "../../monaco/MonacoDiff";
 import type { Milestone } from "../../../types/workspace";
+import type { MilestoneGroup } from "../../../lib/apiClient";
 import { toast } from "react-toastify";
 
 export function VersionsPane() {
@@ -34,8 +36,10 @@ export function VersionsPane() {
     revertLatestCommit,
   } = useMilestonesStore();
   const { blocks } = useBlocksStore();
+  const { currentBranch, branches } = useBranchStore();
 
   const [viewMode, setViewMode] = useState<"list" | "diff">("list");
+  const [branchView, setBranchView] = useState<"all" | "current">("all");
   const hasFetchedRef = useRef(false);
 
   // Fetch grouped timeline when component mounts
@@ -48,17 +52,40 @@ export function VersionsPane() {
 
   // The commits array now contains MilestoneGroup[] - groups of commits organized by milestones
   // Flatten it for display while maintaining the grouping structure
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const groupedTimeline = (commits as any) || [];
+  const groupedTimeline: MilestoneGroup[] = Array.isArray(commits)
+    ? (commits as unknown as MilestoneGroup[])
+    : [];
+
+  // Build a filtered view by branch if requested
+  const currentBranchId = currentBranch?.branch_id;
+  const branchNameMap = new Map(
+    (branches || []).map((b) => [b.branch_id, b.branch_name])
+  );
+
+  const filteredTimeline: MilestoneGroup[] = Array.isArray(groupedTimeline)
+    ? groupedTimeline
+        .map((group: MilestoneGroup) => ({
+          ...group,
+          commits: Array.isArray(group.commits)
+            ? group.commits.filter((c) =>
+                branchView === "all" || !currentBranchId
+                  ? true
+                  : c.branch_id === currentBranchId
+              )
+            : [],
+        }))
+        // Drop groups with no commits after filtering
+        .filter((g: MilestoneGroup) => g.commits && g.commits.length > 0)
+    : [];
 
   // Calculate total counts
-  const milestoneCount = Array.isArray(groupedTimeline)
-    ? groupedTimeline.filter(
+  const milestoneCount = Array.isArray(filteredTimeline)
+    ? filteredTimeline.filter(
         (g: { milestone: unknown }) => g.milestone !== null
       ).length
     : 0;
-  const commitCount = Array.isArray(groupedTimeline)
-    ? groupedTimeline.reduce(
+  const commitCount = Array.isArray(filteredTimeline)
+    ? filteredTimeline.reduce(
         (total: number, group: { commits: unknown[] }) =>
           total + (Array.isArray(group.commits) ? group.commits.length : 0),
         0
@@ -174,8 +201,8 @@ export function VersionsPane() {
 
   // Get the latest commit ID to check if a commit is the most recent
   const getLatestCommitId = () => {
-    if (Array.isArray(groupedTimeline) && groupedTimeline.length > 0) {
-      for (const group of groupedTimeline) {
+    if (Array.isArray(filteredTimeline) && filteredTimeline.length > 0) {
+      for (const group of filteredTimeline) {
         if (Array.isArray(group.commits) && group.commits.length > 0) {
           return group.commits[0].id;
         }
@@ -231,9 +258,43 @@ export function VersionsPane() {
           </div>
 
           {viewMode === "list" && (
-            <div className="text-xs text-muted-foreground">
-              {commitCount} commit{commitCount !== 1 ? "s" : ""} •{" "}
-              {milestoneCount} milestone{milestoneCount !== 1 ? "s" : ""}
+            <div className="flex items-center gap-4">
+              <div className="text-xs text-muted-foreground">
+                {commitCount} commit{commitCount !== 1 ? "s" : ""} •{" "}
+                {milestoneCount} milestone{milestoneCount !== 1 ? "s" : ""}
+              </div>
+              <div className="flex items-center gap-1 bg-gray-800/60 border border-gray-700 rounded-md p-1">
+                <Button
+                  variant={branchView === "all" ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-7 px-2 text-xs ${
+                    branchView === "all"
+                      ? "bg-gray-600 hover:bg-gray-500"
+                      : "text-gray-300 hover:bg-gray-700"
+                  }`}
+                  onClick={() => setBranchView("all")}
+                >
+                  All branches
+                </Button>
+                <Button
+                  variant={branchView === "current" ? "default" : "ghost"}
+                  size="sm"
+                  disabled={!currentBranchId}
+                  className={`h-7 px-2 text-xs ${
+                    branchView === "current"
+                      ? "bg-gray-600 hover:bg-gray-500"
+                      : "text-gray-300 hover:bg-gray-700"
+                  } ${!currentBranchId ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => setBranchView("current")}
+                  title={
+                    currentBranchId
+                      ? `Show only commits on "${currentBranch?.branch_name}"`
+                      : "Checkout a branch to enable"
+                  }
+                >
+                  Current branch
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -270,8 +331,8 @@ export function VersionsPane() {
                 <Loader2 className="w-8 h-8 mb-4 animate-spin text-orange-400" />
                 <p className="text-sm">Loading version history...</p>
               </div>
-            ) : !Array.isArray(groupedTimeline) ||
-              groupedTimeline.length === 0 ? (
+            ) : !Array.isArray(filteredTimeline) ||
+              filteredTimeline.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
                 <GitBranch className="w-12 h-12 mb-4" />
                 <p className="text-sm">No version history</p>
@@ -282,24 +343,8 @@ export function VersionsPane() {
             ) : (
               <div className="p-4 space-y-6">
                 {/* Render each milestone group */}
-                {groupedTimeline.map(
-                  (
-                    group: {
-                      milestone: {
-                        milestone_id: string;
-                        name: string;
-                        notes?: string;
-                        created_at: string;
-                      } | null;
-                      commits: Array<{
-                        id: string;
-                        message: string;
-                        created_at: string;
-                        snapshot_json: { blocks: unknown[] };
-                      }>;
-                    },
-                    groupIndex: number
-                  ) => (
+                {filteredTimeline.map(
+                  (group: MilestoneGroup, groupIndex: number) => (
                     <div
                       key={
                         group.milestone?.milestone_id ||
@@ -369,85 +414,63 @@ export function VersionsPane() {
                       {/* Commits in this group */}
                       {group.commits.length > 0 && (
                         <div className="space-y-2 pl-8">
-                          {group.commits.map(
-                            (commit: {
-                              id: string;
-                              message: string;
-                              created_at: string;
-                              snapshot_json: { blocks: unknown[] };
-                            }) => {
-                              const isLatestCommit =
-                                commit.id === latestCommitId;
+                          {group.commits.map((commit) => {
+                            const isLatestCommit = commit.id === latestCommitId;
+                            const branchLabel = commit.branch_id
+                              ? branchNameMap.get(commit.branch_id) ||
+                                commit.branch_id.substring(0, 8)
+                              : undefined;
 
-                              return (
-                                <div
-                                  key={commit.id}
-                                  className="bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700/70 rounded-lg p-3 transition-colors"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex items-center space-x-2 flex-1 min-w-0">
-                                      <GitCommit className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                                      <div className="flex-1 min-w-0">
-                                        <h4 className="font-medium text-white text-sm mb-1 truncate">
-                                          {commit.message}
-                                          {isLatestCommit && (
-                                            <span className="ml-2 text-xs text-yellow-400">
-                                              (Latest)
-                                            </span>
-                                          )}
-                                        </h4>
-                                        <div className="flex items-center space-x-3 text-xs text-gray-400">
+                            return (
+                              <div
+                                key={commit.id}
+                                className="bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700/70 rounded-lg p-3 transition-colors"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                    <GitCommit className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-medium text-white text-sm mb-1 truncate">
+                                        {commit.message}
+                                        {isLatestCommit && (
+                                          <span className="ml-2 text-xs text-yellow-400">
+                                            (Latest)
+                                          </span>
+                                        )}
+                                        {branchLabel && (
+                                          <span className="ml-2 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-gray-600 text-gray-100 border border-gray-500 align-middle">
+                                            {branchLabel}
+                                          </span>
+                                        )}
+                                      </h4>
+                                      <div className="flex items-center space-x-3 text-xs text-gray-400">
+                                        <span className="flex items-center space-x-1">
+                                          <Clock className="w-3 h-3" />
+                                          <span>
+                                            {new Date(
+                                              commit.created_at
+                                            ).toLocaleString()}
+                                          </span>
+                                        </span>
+                                        {commit.snapshot_json?.blocks && (
                                           <span className="flex items-center space-x-1">
-                                            <Clock className="w-3 h-3" />
+                                            <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
                                             <span>
-                                              {new Date(
-                                                commit.created_at
-                                              ).toLocaleString()}
+                                              {
+                                                commit.snapshot_json.blocks
+                                                  .length
+                                              }{" "}
+                                              blocks
                                             </span>
                                           </span>
-                                          {commit.snapshot_json?.blocks && (
-                                            <span className="flex items-center space-x-1">
-                                              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                                              <span>
-                                                {
-                                                  commit.snapshot_json.blocks
-                                                    .length
-                                                }{" "}
-                                                blocks
-                                              </span>
-                                            </span>
-                                          )}
-                                        </div>
+                                        )}
                                       </div>
                                     </div>
+                                  </div>
 
-                                    <div className="flex items-center space-x-1 flex-shrink-0 ml-3">
-                                      {isLatestCommit ? (
-                                        <>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleRestoreCommit(commit)
-                                            }
-                                            className="h-7 w-7 p-0 text-green-400 hover:text-green-300 hover:bg-green-400/20"
-                                            title="Restore this commit"
-                                          >
-                                            <RotateCcw className="w-3.5 h-3.5" />
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleRevertCommit(commit)
-                                            }
-                                            className="h-7 px-2 text-xs bg-red-900/30 border-red-600/50 text-red-400 hover:bg-red-900/50 hover:text-red-300"
-                                            title="Revert this commit (will hide it from timeline)"
-                                          >
-                                            Revert
-                                          </Button>
-                                        </>
-                                      ) : (
+                                  <div className="flex items-center space-x-1 flex-shrink-0 ml-3">
+                                    {isLatestCommit ? (
+                                      <>
                                         <Button
                                           variant="ghost"
                                           size="sm"
@@ -459,13 +482,36 @@ export function VersionsPane() {
                                         >
                                           <RotateCcw className="w-3.5 h-3.5" />
                                         </Button>
-                                      )}
-                                    </div>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleRevertCommit(commit)
+                                          }
+                                          className="h-7 px-2 text-xs bg-red-900/30 border-red-600/50 text-red-400 hover:bg-red-900/50 hover:text-red-300"
+                                          title="Revert this commit (will hide it from timeline)"
+                                        >
+                                          Revert
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                          handleRestoreCommit(commit)
+                                        }
+                                        className="h-7 w-7 p-0 text-green-400 hover:text-green-300 hover:bg-green-400/20"
+                                        title="Restore this commit"
+                                      >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
-                              );
-                            }
-                          )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

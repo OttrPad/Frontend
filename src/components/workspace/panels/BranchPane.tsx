@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react';
-import { useBranchStore } from '../../../store/branch';
-import { Button } from '../../ui/button';
-import CreateBranchModal from '../../modals/CreateBranchModal';
-import MergeModal from '../../modals/MergeModal';
-import MergeConflictModal from '../../modals/MergeConflictModal';
-import { GitBranch, GitMerge, AlertTriangle, Plus, Trash2, Check, Download, Upload } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useBranchStore } from "../../../store/branch";
+import { Button } from "../../ui/button";
+import CreateBranchModal from "../../modals/CreateBranchModal";
+import MergeModal from "../../modals/MergeModal";
+import MergeConflictModal from "../../modals/MergeConflictModal";
+import {
+  GitBranch,
+  GitMerge,
+  AlertTriangle,
+  Plus,
+  Trash2,
+  Check,
+  Download,
+  Upload,
+} from "lucide-react";
+import { toast } from "react-toastify";
 
 interface BranchPaneProps {
   roomId: string;
@@ -26,7 +36,7 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [showConflicts, setShowConflicts] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [isPulling, setIsPulling] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
 
@@ -37,64 +47,174 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
     }
   }, [roomId, fetchBranches, fetchCurrentBranch]);
 
-  const filteredBranches = branches?.filter(b =>
-    b.branch_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const filteredBranches =
+    branches?.filter(
+      (b) =>
+        b.branch_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
 
   const handleCheckout = async (branchId: string, branchName: string) => {
     if (branchId === currentBranch?.branch_id) {
       return; // Already on this branch
     }
-    
-    if (confirm(`Switch to branch "${branchName}"?`)) {
-      try {
-        await checkoutBranch(branchId, roomId);
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to checkout branch');
+    // Confirm via toast
+    const confirmId = toast.info(
+      <div className="flex flex-col gap-3">
+        <div className="whitespace-pre-wrap">
+          Switch to branch "{branchName}"?
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => toast.dismiss(confirmId)}
+            className="h-8"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              toast.dismiss(confirmId);
+              const loadingId = toast.loading(
+                `Checking out "${branchName}"...`
+              );
+              try {
+                await checkoutBranch(branchId, roomId);
+                await fetchCurrentBranch(roomId);
+                await fetchBranches(roomId);
+                toast.update(loadingId, {
+                  render: `Switched to "${branchName}"`,
+                  type: "success",
+                  isLoading: false,
+                  autoClose: 2000,
+                });
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to checkout branch";
+                toast.update(loadingId, {
+                  render: message,
+                  type: "error",
+                  isLoading: false,
+                  autoClose: 4000,
+                });
+              }
+            }}
+            className="h-8 bg-orange-500 hover:bg-orange-600"
+          >
+            Confirm
+          </Button>
+        </div>
+      </div>,
+      {
+        position: "top-center",
+        autoClose: false,
+        closeButton: false,
+        draggable: false,
+        closeOnClick: false,
       }
-    }
+    );
   };
 
   const handleDelete = async (branchId: string, branchName: string) => {
-    if (confirm(`Are you sure you want to delete branch "${branchName}"? This action cannot be undone.`)) {
-      try {
-        await deleteBranch(branchId);
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete branch');
+    const confirmId = toast.warning(
+      <div className="flex flex-col gap-3">
+        <div className="whitespace-pre-wrap">
+          Are you sure you want to delete branch "{branchName}"? This action
+          cannot be undone.
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => toast.dismiss(confirmId)}
+            className="h-8"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              toast.dismiss(confirmId);
+              const loadingId = toast.loading(`Deleting "${branchName}"...`);
+              try {
+                await deleteBranch(branchId);
+                await fetchBranches(roomId);
+                toast.update(loadingId, {
+                  render: "Branch deleted",
+                  type: "success",
+                  isLoading: false,
+                  autoClose: 2000,
+                });
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to delete branch";
+                toast.update(loadingId, {
+                  render: message,
+                  type: "error",
+                  isLoading: false,
+                  autoClose: 4000,
+                });
+              }
+            }}
+            className="h-8 bg-red-500 hover:bg-red-600"
+          >
+            Delete
+          </Button>
+        </div>
+      </div>,
+      {
+        position: "top-center",
+        autoClose: false,
+        closeButton: false,
+        draggable: false,
+        closeOnClick: false,
       }
-    }
+    );
   };
 
   const handlePull = async () => {
     if (!currentBranch) {
-      alert('No branch currently checked out');
+      alert("No branch currently checked out");
       return;
     }
 
     if (currentBranch.is_main) {
-      alert('Cannot pull into main branch. Main is the source branch.');
+      alert("Cannot pull into main branch. Main is the source branch.");
       return;
     }
 
-    if (!confirm(`Pull changes from main into "${currentBranch.branch_name}"?`)) {
+    if (
+      !confirm(`Pull changes from main into "${currentBranch.branch_name}"?`)
+    ) {
       return;
     }
 
     setIsPulling(true);
     try {
       const result = await pullFromMain(currentBranch.branch_id, roomId);
-      
+
       if (result.hasConflicts) {
-        alert(`Pull has ${result.conflicts?.length || 0} conflicts. Please resolve them in the Conflicts tab.`);
+        alert(
+          `Pull has ${
+            result.conflicts?.length || 0
+          } conflicts. Please resolve them in the Conflicts tab.`
+        );
         setShowConflicts(true);
       } else {
-        alert('Successfully pulled changes from main!');
+        alert("Successfully pulled changes from main!");
         // Refresh branches to show updated state
         await fetchBranches(roomId);
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to pull from main');
+      alert(
+        error instanceof Error ? error.message : "Failed to pull from main"
+      );
     } finally {
       setIsPulling(false);
     }
@@ -102,33 +222,44 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
 
   const handlePush = async () => {
     if (!currentBranch) {
-      alert('No branch currently checked out');
+      alert("No branch currently checked out");
       return;
     }
 
     if (currentBranch.is_main) {
-      alert('Cannot push main to main. Push is for merging sub-branches into main.');
+      alert(
+        "Cannot push main to main. Push is for merging sub-branches into main."
+      );
       return;
     }
 
-    if (!confirm(`Push changes from "${currentBranch.branch_name}" to main?\n\nThis will merge your branch into main. Only owners and admins can do this.`)) {
+    if (
+      !confirm(
+        `Push changes from "${currentBranch.branch_name}" to main?\n\nThis will merge your branch into main. Only owners and admins can do this.`
+      )
+    ) {
       return;
     }
 
     setIsPushing(true);
     try {
       const result = await pushToMain(currentBranch.branch_id, roomId);
-      
+
       if (result.hasConflicts) {
-        alert(`Push has ${result.conflicts?.length || 0} conflicts. Please resolve them in the Conflicts tab.`);
+        alert(
+          `Push has ${
+            result.conflicts?.length || 0
+          } conflicts. Please resolve them in the Conflicts tab.`
+        );
         setShowConflicts(true);
       } else {
-        alert('Successfully pushed changes to main!');
+        alert("Successfully pushed changes to main!");
         // Refresh branches to show updated state
         await fetchBranches(roomId);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to push to main';
+      const message =
+        error instanceof Error ? error.message : "Failed to push to main";
       alert(message);
     } finally {
       setIsPushing(false);
@@ -196,7 +327,9 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
               title="Pull changes from main branch"
             >
               <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-              <span className="truncate">{isPulling ? 'Pulling...' : 'Pull'}</span>
+              <span className="truncate">
+                {isPulling ? "Pulling..." : "Pull"}
+              </span>
             </Button>
             <Button
               size="sm"
@@ -207,7 +340,9 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
               title="Push changes to main branch (requires owner/admin)"
             >
               <Upload className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-              <span className="truncate">{isPushing ? 'Pushing...' : 'Push'}</span>
+              <span className="truncate">
+                {isPushing ? "Pushing..." : "Push"}
+              </span>
             </Button>
           </div>
         )}
@@ -244,19 +379,19 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {filteredBranches.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">
-            {searchTerm ? 'No branches match your search' : 'No branches yet'}
+            {searchTerm ? "No branches match your search" : "No branches yet"}
           </div>
         ) : (
           filteredBranches.map((b) => {
             const isCurrent = b.branch_id === currentBranch?.branch_id;
-            
+
             return (
               <div
                 key={b.branch_id}
                 className={`p-3 border rounded-lg transition-colors ${
                   isCurrent
-                    ? 'border-orange-500 bg-orange-500/5'
-                    : 'border-border bg-muted/30 hover:bg-muted/50'
+                    ? "border-orange-500 bg-orange-500/5"
+                    : "border-border bg-muted/30 hover:bg-muted/50"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -292,7 +427,7 @@ export default function BranchPane({ roomId }: BranchPaneProps) {
                     disabled={isCurrent}
                     className="h-7 px-2 text-xs flex-1"
                   >
-                    {isCurrent ? 'Current' : 'Checkout'}
+                    {isCurrent ? "Current" : "Checkout"}
                   </Button>
                   {!b.is_main && (
                     <Button

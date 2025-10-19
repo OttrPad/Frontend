@@ -234,6 +234,12 @@ export function SharedMonacoEditor({
   const inlineCompletionDisposableRef = useRef<{ dispose(): void } | null>(
     null
   );
+  // Throttle state to limit AI requests
+  const lastAiCallRef = useRef<number>(0);
+  const inflightAbortRef = useRef<AbortController | null>(null);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TYPING_PAUSE_MS = 600; // wait for a brief pause before calling AI
+  const COOLDOWN_MS = 4000; // minimum time between server calls
 
   // Keep current binding so we can dispose when switching blocks/notebooks
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -336,8 +342,36 @@ export function SharedMonacoEditor({
       inlineCompletionDisposableRef.current =
         monacoInstance.languages.registerInlineCompletionsProvider("python", {
           async provideInlineCompletions(model, position, _context, token) {
+            // Cancel any pending delayed call if user keeps typing
+            if (pendingTimerRef.current) {
+              clearTimeout(pendingTimerRef.current);
+              pendingTimerRef.current = null;
+            }
+
+            // Enforce cooldown between requests
+            const now = Date.now();
+            const sinceLast = now - lastAiCallRef.current;
+            if (sinceLast < COOLDOWN_MS) {
+              return { items: [] };
+            }
+
+            // If there's an inflight request, abort it to avoid overlap
+            inflightAbortRef.current?.abort();
+
+            // Gather context, but trim to reasonable window to reduce tokens
+            const languageId = model.getLanguageId();
+            const maxLines = 200; // keep context small
+            const startLine = Math.max(
+              1,
+              position.lineNumber - Math.floor(maxLines / 2)
+            );
+            const endLine = Math.min(
+              model.getLineCount(),
+              position.lineNumber + Math.floor(maxLines / 2)
+            );
+
             const textBefore = model.getValueInRange({
-              startLineNumber: 1,
+              startLineNumber: startLine,
               startColumn: 1,
               endLineNumber: position.lineNumber,
               endColumn: position.column,
@@ -346,58 +380,84 @@ export function SharedMonacoEditor({
             const textAfter = model.getValueInRange({
               startLineNumber: position.lineNumber,
               startColumn: position.column,
-              endLineNumber: model.getLineCount(),
-              endColumn: model.getLineMaxColumn(model.getLineCount()),
+              endLineNumber: endLine,
+              endColumn: model.getLineMaxColumn(endLine),
             });
 
-            const languageId = model.getLanguageId();
+            // Heuristics: only try when user paused and there's a meaningful prefix
+            const hasMeaningfulPrefix = /\S{3,}$/.test(textBefore.slice(-80));
+            if (!hasMeaningfulPrefix) {
+              return { items: [] };
+            }
 
-            let cancellationRequested = token.isCancellationRequested;
-            let cancellationDisposable: { dispose(): void } | null = null;
+            // Delay to ensure user paused typing
+            const waitForPause = () =>
+              new Promise<void>((resolve) => {
+                pendingTimerRef.current = setTimeout(
+                  () => resolve(),
+                  TYPING_PAUSE_MS
+                );
+              });
+
+            let cancelled = token.isCancellationRequested;
+            const cancelSub = token.onCancellationRequested(() => {
+              cancelled = true;
+              inflightAbortRef.current?.abort();
+            });
 
             try {
-              cancellationDisposable = token.onCancellationRequested(() => {
-                cancellationRequested = true;
-              });
-
-              if (cancellationRequested) {
+              await waitForPause();
+              if (cancelled || token.isCancellationRequested)
                 return { items: [] };
-              }
 
-              const data = await apiClient.getAiSuggestion({
-                contextBefore: textBefore,
-                contextAfter: textAfter,
-                language: languageId,
-                cursor: {
-                  line: position.lineNumber,
-                  column: position.column,
+              // Final guard: respect cooldown and check if user changed cursor significantly
+              const now2 = Date.now();
+              if (now2 - lastAiCallRef.current < COOLDOWN_MS)
+                return { items: [] };
+
+              const controller = new AbortController();
+              inflightAbortRef.current = controller;
+
+              const data = await apiClient.getAiSuggestion(
+                {
+                  contextBefore: textBefore,
+                  contextAfter: textAfter,
+                  language: languageId,
+                  cursor: {
+                    line: position.lineNumber,
+                    column: position.column,
+                  },
+                  promptGuidelines:
+                    "Only return a short, inline code completion. Do not repeat existing text. Prefer finishing the current line or the next small logical unit. Keep it under ~30 tokens. If unsure, return nothing.",
                 },
-              });
+                { signal: controller.signal }
+              );
 
-              if (cancellationRequested || token.isCancellationRequested) {
+              if (cancelled || token.isCancellationRequested)
                 return { items: [] };
-              }
+
+              lastAiCallRef.current = Date.now();
 
               const suggestionTexts: string[] = [];
 
               if (Array.isArray(data.items)) {
-                data.items.forEach((item) => {
-                  if (typeof item?.text === "string" && item.text.trim()) {
-                    suggestionTexts.push(item.text);
+                for (const item of data.items) {
+                  if (typeof item?.text === "string") {
+                    const trimmed = item.text.trim();
+                    if (trimmed) suggestionTexts.push(trimmed);
                   }
-                });
+                }
               }
 
               if (
                 !suggestionTexts.length &&
                 typeof data.suggestion === "string"
               ) {
-                suggestionTexts.push(data.suggestion);
+                const trimmed = data.suggestion.trim();
+                if (trimmed) suggestionTexts.push(trimmed);
               }
 
-              if (!suggestionTexts.length) {
-                return { items: [] };
-              }
+              if (!suggestionTexts.length) return { items: [] };
 
               return {
                 items: suggestionTexts.map((text) => ({
@@ -410,11 +470,23 @@ export function SharedMonacoEditor({
                   ),
                 })),
               };
-            } catch (error) {
+            } catch (error: unknown) {
+              // Abort from fetch
+              if (
+                error &&
+                typeof error === "object" &&
+                "name" in error &&
+                (error as { name?: string }).name === "AbortError"
+              ) {
+                return { items: [] };
+              }
               console.error("Inline suggestion failed", error);
               return { items: [] };
             } finally {
-              cancellationDisposable?.dispose();
+              cancelSub?.dispose?.();
+              if (inflightAbortRef.current?.signal?.aborted) {
+                inflightAbortRef.current = null;
+              }
             }
           },
           disposeInlineCompletions() {},

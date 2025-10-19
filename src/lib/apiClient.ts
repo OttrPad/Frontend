@@ -143,6 +143,7 @@ export interface MilestoneGroup {
     created_at: string;
     author_id: string;
     snapshot_json: CommitSnapshot;
+    branch_id?: string;
   }>;
 }
 
@@ -154,6 +155,8 @@ export interface AiSuggestionRequest {
     line: number;
     column: number;
   };
+  // Optional hint to steer the provider without changing server behavior
+  promptGuidelines?: string;
 }
 
 export interface AiSuggestionItem {
@@ -959,11 +962,13 @@ class ApiClient {
     );
   }
   async getAiSuggestion(
-    payload: AiSuggestionRequest
+    payload: AiSuggestionRequest,
+    options?: { signal?: AbortSignal }
   ): Promise<AiSuggestionResponse> {
     return this.request(`/api/ai/suggest`, {
       method: "POST",
       body: JSON.stringify(payload),
+      signal: options?.signal,
     });
   }
 }

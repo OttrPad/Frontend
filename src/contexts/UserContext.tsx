@@ -58,7 +58,23 @@ export function UserProvider({ children }: UserProviderProps) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      // Invalidate session globally and clear cookies
+      // Use global scope when available; fall back to default signOut signature
+      // Supabase types may not include the 'scope' option in some SDK versions.
+      await (
+        supabase.auth.signOut as unknown as (args?: {
+          scope?: "global" | "local";
+        }) => Promise<void>
+      )({ scope: "global" });
+    } finally {
+      // Proactively clear local auth state
+      setSession(null);
+      setUser(null);
+      // Hard redirect to root to avoid stale state and ensure SPA bootstraps unauthenticated
+      const target = `${window.location.origin}/`;
+      window.location.replace(target);
+    }
   };
 
   // Create a normalized user profile object

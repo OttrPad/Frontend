@@ -24,8 +24,7 @@ export function ProfileHeader({
   const handleSignOut = async () => {
     try {
       await signOut();
-      toast.success("Signed out successfully");
-      navigate("/");
+      // signOut will perform a hard redirect; toast may not be visible afterwards
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Failed to sign out");

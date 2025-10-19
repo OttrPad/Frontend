@@ -6,8 +6,7 @@ import { ToastContainer } from "react-toastify";
 import RoomsPage from "./pages/rooms/RoomsPage";
 import { useAppStore } from "./store/workspace";
 import { UserProvider } from "./contexts/UserContext";
-
-
+import { AuthCallbackPage } from "@/pages/auth/AuthCallbackPage";
 
 function App() {
   const { theme } = useAppStore();
@@ -53,6 +52,7 @@ function App() {
         <Route path="/join" element={<RoomsPage />} />
         <Route path="/workspace/:roomId" element={<WorkspacePage />} />
         <Route path="/room/:roomCode" element={<WorkspacePage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         {/* <Route path="/Signup" element={<SignupPage />} /> */}
       </Routes>
     </UserProvider>
